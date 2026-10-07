@@ -62,8 +62,13 @@ android {
     }
     buildTypes {
         release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // R8 shrinks and obfuscates the release build. Capacitor resolves
+            // plugins reflectively through @CapacitorPlugin annotations, so its
+            // consumerProguardFiles (pulled in via :capacitor-android) must stay
+            // on the classpath — replacing them here would break every plugin.
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             // Falls back to unsigned when no keystore is configured, so a plain
             // `assembleRelease` still yields an APK for local testing instead of
             // failing the build.

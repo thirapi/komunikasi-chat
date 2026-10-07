@@ -7,6 +7,45 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.0.1] — 2026-10-07
+
+Hardening pass on the Android shell plus the branding that `1.0.0` shipped
+with stock Capacitor artwork. No user-facing behaviour change on the web app.
+
+### Fixed
+
+#### Native splash screen showed Capacitor branding
+
+The eleven `splash.png` files across `drawable-*` were still the ones Capacitor
+ships: the blue Capacitor logo centred on white. Everything else in the app is
+dark, so the launch screen was the last surface still showing stock artwork.
+Regenerated from `public/icons/logo-mark-white.png` on the `#0a0a0a` background
+that `capacitor.config.ts` already declared. Regeneration is scripted in
+`scripts/generate-android-splash.sh` so the files stop drifting from the brand
+mark again.
+
+### Changed
+
+#### R8 enabled for release builds
+
+`minifyEnabled` was `false`, so the release APK shipped unshrunk and
+unobfuscated. Both `minifyEnabled` and `shrinkResources` are now on, using
+`proguard-android-optimize.txt`. The APK went from 4.3 MB to 1.5 MB.
+
+Capacitor resolves plugins reflectively through `@CapacitorPlugin` annotations,
+so its `consumerProguardFiles` must stay on the classpath — the fix keeps the
+existing `proguardFiles` list and only adds the flag.
+
+#### Backups disabled
+
+`android:allowBackup` was `true`, which security scanners flag and which lets
+app data leave the device through cloud backup or device-to-device transfer.
+Now `false`, with `data_extraction_rules.xml` excluding every domain for
+Android 12+ builds where `allowBackup` alone is not sufficient, and
+`usesCleartextTraffic="false"` stated explicitly rather than left to default.
+
+---
+
 ## [1.0.0] — 2026-09-28
 
 First public release. The web app has been running behind a real domain; this
