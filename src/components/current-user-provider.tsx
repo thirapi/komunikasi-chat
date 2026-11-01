@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useEffect } from "react";
 import { clientChatCache } from "@/lib/infrastructure/cache/client-cache";
+import { announceSignedIn } from "@/lib/session-signal";
+import { WebPushSubscription } from "@/components/web-push-subscription";
 
 export interface CurrentUser {
   id: string;
@@ -26,11 +28,14 @@ export function CurrentUserProvider({
   // A cache written by another account (shared computer, account switch,
   // expired session followed by a different login) is wiped before use.
   useEffect(() => {
-    if (user?.id) void clientChatCache.ensureOwner(user.id);
+    if (!user?.id) return;
+    void clientChatCache.ensureOwner(user.id);
+    announceSignedIn(user.id);
   }, [user?.id]);
 
   return (
     <CurrentUserContext.Provider value={user}>
+      {user?.id && <WebPushSubscription userId={user.id} />}
       {children}
     </CurrentUserContext.Provider>
   );
