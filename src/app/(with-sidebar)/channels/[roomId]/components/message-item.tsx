@@ -123,7 +123,7 @@ const MARKDOWN_CODE_COMPONENTS = {
     );
   },
 };
-import { ArrowBendUpLeft, File, DownloadSimple, Trash, Copy, PencilSimple, Check, WarningCircle } from "@phosphor-icons/react/dist/ssr";
+import { ArrowBendUpLeft, File, DownloadSimple, Trash, Copy, PencilSimple, Check, Checks, WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { Button } from "@/components/ui/button";
 import { useState, useMemo, useEffect, useRef, useCallback, memo } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -206,6 +206,7 @@ export function MessageItemComponent({
   onRetrySend,
   onDiscardSend,
   roomData,
+  receipt,
 }: {
   message: MessageWithUserDTO;
   onlineUserIds: string[];
@@ -223,6 +224,8 @@ export function MessageItemComponent({
   onRetrySend?: (message: MessageWithUserDTO) => void;
   onDiscardSend?: (message: MessageWithUserDTO) => void;
   roomData?: RoomWithParticipantsDTO;
+  /** DM only, own sent messages: delivered to the server, or read by the other person. */
+  receipt?: "sent" | "read";
 }) {
   const router = useRouter();
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -855,7 +858,7 @@ const getFileName = (url: string) => {
         )}
       </div>
 
-      <div className="flex-1 min-w-0">
+      <div className={cn("flex-1 min-w-0", receipt && "pr-5")}>
         {showHeader && (
           <div className="flex items-baseline gap-2 min-w-0">
             <ProfileHoverCard
@@ -1117,6 +1120,23 @@ const getFileName = (url: string) => {
               Hapus
             </button>
           </div>
+        )}
+
+        {receipt && (
+          <span
+            className={cn(
+              "absolute bottom-1 right-2 sm:right-3",
+              receipt === "read" ? "text-primary" : "text-muted-foreground/70"
+            )}
+            title={receipt === "read" ? "Dibaca" : "Terkirim"}
+            aria-label={receipt === "read" ? "Dibaca" : "Terkirim"}
+          >
+            {receipt === "read" ? (
+              <Checks weight="bold" className="h-3.5 w-3.5" />
+            ) : (
+              <Check weight="bold" className="h-3.5 w-3.5" />
+            )}
+          </span>
         )}
 
         {/* Hover toolbar (desktop) / tap-to-reveal toolbar (mobile) */}

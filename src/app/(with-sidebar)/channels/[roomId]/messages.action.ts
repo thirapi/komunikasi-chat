@@ -15,6 +15,7 @@ import {
 const UPLOAD_FOLDERS = new Set(["avatars", "banners", "room-avatars", "room-banners"]);
 import { ServerResponse } from "@/lib/entities/models/response.model";
 import { getMessageController } from "@/lib/interface-adapters/controllers/messages/get-message.controller";
+import { syncRoomMessagesController } from "@/lib/interface-adapters/controllers/messages/sync-room-messages.controller";
 import { sendMessageController } from "@/lib/interface-adapters/controllers/messages/send-message.controller";
 import {
   startTypingController,
@@ -232,6 +233,28 @@ export const getMessage = async (roomId: string, limit?: number, before?: Date, 
         type: err.name,
         meta: err.fields,
       },
+    };
+  }
+};
+
+/**
+ * Catch a room up from a sync cursor: messages created or changed since
+ * (edits, deletions, reactions), or the newest page when too much changed.
+ * Used on reconnect/focus, where only fetching newer messages missed edits and
+ * deletions made while the socket was down.
+ */
+export const syncRoomMessages = async (roomId: string, since?: Date | string | null) => {
+  try {
+    const viewerId = await requireReader();
+    await assertCanReadRoom(roomId, viewerId);
+    const sync = await syncRoomMessagesController(roomId, since ? new Date(since) : null);
+    return { status: "success" as const, data: sync, error: null };
+  } catch (err: any) {
+    console.error("Action Error:", err);
+    return {
+      status: "error" as const,
+      data: null,
+      error: { message: err.message || "Terjadi kesalahan internal", type: err.name },
     };
   }
 };

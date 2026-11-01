@@ -83,6 +83,41 @@ export class MessageRepository implements IMessageRepository {
     });
   }
 
+  async getRoomChangesSince(
+    roomId: string,
+    since: Date,
+    limit: number,
+  ): Promise<{ changed: MessageWithUserDTO[]; deletedIds: string[]; overflow: boolean }> {
+    const rows = await this.client.query.messages.findMany({
+      where: and(
+        eq(messages.roomId, roomId),
+        or(gt(messages.createdAt, since), gt(messages.updatedAt, since)),
+      ),
+      orderBy: [desc(messages.createdAt)],
+      limit: limit + 1,
+      with: {
+        user: { columns: { username: true, name: true, avatar: true } },
+        replyToMessage: {
+          with: { user: { columns: { username: true, name: true } } },
+        },
+        attachments: true,
+        reactions: {
+          with: { user: { columns: { username: true, name: true } } },
+        },
+      },
+    });
+
+    const overflow = rows.length > limit;
+    const window = (overflow ? rows.slice(0, limit) : rows).reverse();
+    const deletedIds = window.filter((m) => m.isDeleted).map((m) => m.id);
+    const changed = window.filter((m) => !m.isDeleted) as unknown as MessageWithUserDTO[];
+    return { changed, deletedIds, overflow };
+  }
+
+  async touchMessage(messageId: string): Promise<void> {
+    await this.client.update(messages).set({ updatedAt: new Date() }).where(eq(messages.id, messageId));
+  }
+
   async getMessagesByRoomId(roomId: string, limit?: number, before?: Date, after?: Date): Promise<MessageWithUserDTO[]> {
     const filters = [eq(messages.roomId, roomId), eq(messages.isDeleted, false)];
     if (before) {

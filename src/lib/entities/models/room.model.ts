@@ -20,6 +20,8 @@ export interface SidebarRoomDTO {
   avatar: string;
   hasUnread: boolean;
   hasMention: boolean;
+  /** Unread messages from others, capped at 100 (shown as "99+"). */
+  unreadCount: number;
   type: "channel" | "direct";
   userId?: string;
   lastMessage?: string;
@@ -47,6 +49,7 @@ export interface SidebarRoomRow {
   otherUsername: string | null;
   otherAvatar: string | null;
   hasMention: boolean;
+  unreadCount: number | string | null;
 }
 
 export interface RoomWithParticipantsDTO extends RoomRecord {  createdAt: Date;

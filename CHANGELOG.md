@@ -11,6 +11,29 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+#### Unread counts, mention jump and read receipts
+
+- The chat list shows how many messages are unread ("99+" past that) instead
+  of a dot, with the "@" badge next to it when the user is mentioned.
+- Inside a room, an "@" button jumps to the next unread mention.
+- DMs show ✓ (sent) and ✓✓ (read) on your own messages, driven by the other
+  person's read position over the room's private channel. Channels are left
+  out on purpose; there is no setting to turn receipts off yet.
+
+#### Delta sync
+
+Opening a cached room, and catching up after a reconnect, now asks only for
+messages created or changed since the last sync (edits, deletions and
+reactions included) instead of re-downloading the newest 50. Reactions bump
+`Message.updatedAt` so their changes are picked up. More than 50 changes falls
+back to a full page.
+
+#### Message indexes
+
+`Message` had no indexes. Migration `0027` adds `(roomId, createdAt)` and
+`(roomId, updatedAt)`, which every per-room read uses (newest page, paging,
+sidebar latest message and unread count, delta sync).
+
 #### Direct uploads to R2, attach menu and drag-and-drop
 
 Vercel caps function request bodies at ~4.5 MB, so larger attachments always

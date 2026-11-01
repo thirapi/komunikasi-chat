@@ -1,0 +1,2 @@
+CREATE INDEX "Message_roomId_createdAt_idx" ON "Message" USING btree ("roomId","createdAt");--> statement-breakpoint
+CREATE INDEX "Message_roomId_updatedAt_idx" ON "Message" USING btree ("roomId","updatedAt");

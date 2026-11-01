@@ -28,6 +28,7 @@ export function MessageList({
   lastReadMessageId,
   lastReadAt,
   unreadSettled = true,
+  peerReadAt = null,
   userId,
   onLoadMore,
   hasMore,
@@ -56,6 +57,8 @@ export function MessageList({
    * marker follows the cached data; from then on it is fixed.
    */
   unreadSettled?: boolean;
+  /** DM only: how far the other person has read, for ✓ / ✓✓ on own messages. */
+  peerReadAt?: Date | null;
   userId: string;
   onLoadMore: () => void;
   hasMore: boolean;
@@ -129,6 +132,7 @@ export function MessageList({
   }, [messages, lastReadAt, lastReadMessageId, initialUnreadId, isUnreadCleared]);
 
   let lastDate: string | null = null;
+  const peerReadTime = peerReadAt ? new Date(peerReadAt).getTime() : 0;
 
   const loadMoreRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -236,6 +240,11 @@ export function MessageList({
           onRetrySend={onRetrySend}
           onDiscardSend={onDiscardSend}
           roomData={roomData}
+          receipt={
+            roomData.isDirect && msg.userId === userId && !msg.isOptimistic && !msg.sendError
+              ? peerReadTime >= msgTime ? "read" : "sent"
+              : undefined
+          }
         />
       </div>
     );

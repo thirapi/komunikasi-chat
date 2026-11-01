@@ -74,9 +74,13 @@ export function prefetchRoom(roomId: string) {
 
       const res = await getRoomSnapshot(roomId);
       if (res.status !== "success" || !res.data) return;
-      const { room: roomData, messages: fetched, lastRead } = res.data;
+      // No cursor was sent, so this is always a full page.
+      const { room: roomData, sync, lastRead } = res.data;
       await clientChatCache.setRoom(roomId, roomData);
-      await clientChatCache.setMessages(roomId, fetched);
+      if (sync.mode === "full") {
+        await clientChatCache.setMessages(roomId, sync.messages);
+        await clientChatCache.setSyncCursor(roomId, sync.cursor);
+      }
       await clientChatCache.setLastRead(roomId, lastRead.id, lastRead.at ? new Date(lastRead.at) : null);
     } catch (e) {
       console.warn("[prefetchRoom] failed", e);

@@ -1,9 +1,9 @@
 "use client";
 
 import { roomChannel } from "@/lib/pusher/channels";
-import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from "react";
 import { getPusher } from "@/lib/pusher/pusher.client";
-import { getMessage, updateLastReadAt, editMessageAction, toggleReactionAction } from "../messages.action";
+import { getMessage, updateLastReadAt, editMessageAction, toggleReactionAction, syncRoomMessages } from "../messages.action";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { createId } from "@paralleldrive/cuid2";
@@ -24,7 +24,7 @@ import { useMarkAsRead } from "./hooks/use-mark-as-read";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePresence } from "@/components/presence-provider";
 import { useUnread } from "@/components/unread-provider";
-import { ArrowDown, Paperclip } from "@phosphor-icons/react/dist/ssr";
+import { ArrowDown, At, Paperclip } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 import { stripMarkdown } from "@/lib/strip-markdown";
 import { retrySend, clearRetry } from "@/lib/chat/pending-sends";
@@ -90,6 +90,20 @@ export function ChatRoom({
   const [lastReadAtState, setLastReadAtState] = useState<Date | null>(
     lastReadAt,
   );
+  // DM read receipts: how far the other participant has read.
+  const [peerReadAt, setPeerReadAt] = useState<Date | null>(() => {
+    if (!roomData.isDirect) return null;
+    const peer = roomData.participants?.find((p) => p.user.id !== userId);
+    return peer?.lastReadAt ? new Date(peer.lastReadAt) : null;
+  });
+  useEffect(() => {
+    // A fresh server snapshot of the room carries the latest value.
+    if (!roomData.isDirect) return;
+    const peer = roomData.participants?.find((p) => p.user.id !== userId);
+    if (!peer?.lastReadAt) return;
+    const at = new Date(peer.lastReadAt);
+    setPeerReadAt((prev) => (!prev || at > prev ? at : prev));
+  }, [roomData, userId]);
   const [highlightedMessageId, setHighlightedMessageId] = useState<
     string | null
   >(null);
@@ -625,12 +639,51 @@ export function ChatRoom({
     syncInFlightRef.current = true;
     try {
       const lastMessage = currentMessages[currentMessages.length - 1];
-      const afterDate = new Date(lastMessage.createdAt);
+      const newest = new Date(lastMessage.createdAt).getTime();
+      const { clientChatCache } = await import("@/lib/infrastructure/cache/client-cache");
+      const cursor = await clientChatCache.getSyncCursor(roomData.id);
 
-      const response = await getMessage(roomData.id, 50, undefined, afterDate);
-      if (response.status === "success" && response.data) {
-        response.data.forEach((msg) => handleNewMessage(msg, true));
+      if (!cursor) {
+        // No sync cursor yet: fall back to fetching newer messages only.
+        const response = await getMessage(roomData.id, 50, undefined, new Date(newest));
+        if (response.status === "success" && response.data) {
+          response.data.forEach((msg) => handleNewMessage(msg, true));
+        }
+        return;
       }
+
+      // Catch up from the cursor: new messages, plus edits, deletions and
+      // reactions that happened while the socket was down.
+      const response = await syncRoomMessages(roomData.id, cursor);
+      if (response.status !== "success" || !response.data) return;
+      const sync = response.data;
+      const incoming = sync.mode === "delta" ? sync.changed : sync.messages;
+      const deleted = new Set(sync.mode === "delta" ? sync.deletedIds : []);
+      const mounted = new Set(messagesRef.current.map((m) => m.id));
+
+      // Rows we already show are replaced in place. Going through
+      // handleNewMessage would treat an edited message of our own as a fresh
+      // send and move the read position back to it.
+      const replacements = new Map(incoming.filter((m) => mounted.has(m.id)).map((m) => [m.id, m]));
+      if (replacements.size > 0 || deleted.size > 0) {
+        setMessages((prev) =>
+          prev
+            .filter((m) => !deleted.has(m.id))
+            .map((m) => {
+              const next = replacements.get(m.id);
+              return next ? { ...next, isOptimistic: false } : m;
+            }),
+        );
+        if (replacements.size > 0) void clientChatCache.mergeMessages(roomData.id, [...replacements.values()]);
+        deleted.forEach((id) => void clientChatCache.removeMessage(roomData.id, id));
+      }
+      // Only genuinely newer rows are appended; an older message edited while
+      // we were away is not inserted at the bottom.
+      incoming
+        .filter((m) => !mounted.has(m.id) && new Date(m.createdAt).getTime() > newest)
+        .forEach((msg) => handleNewMessage(msg, true));
+
+      void clientChatCache.setSyncCursor(roomData.id, sync.cursor);
     } finally {
       lastSyncAtRef.current = Date.now();
       syncInFlightRef.current = false;
@@ -674,6 +727,23 @@ export function ChatRoom({
   useEffect(() => {
     if (isAtBottom) setMissedCount(0);
   }, [isAtBottom]);
+
+  // Unread mentions of this user (or @everyone) below the read position, for
+  // the "@" jump button (Telegram-style). Derived from state: once a mention
+  // has been on screen long enough to be marked read it drops out.
+  const unreadMentionIds = useMemo(() => {
+    const readTime = lastReadAtState ? new Date(lastReadAtState).getTime() : 0;
+    const mine = `<@${userId}>`;
+    return messages
+      .filter(
+        (m) =>
+          m.userId !== userId &&
+          !m.isOptimistic &&
+          new Date(m.createdAt).getTime() > readTime &&
+          (m.content?.includes(mine) || m.content?.includes("<@everyone>")),
+      )
+      .map((m) => m.id);
+  }, [messages, lastReadAtState, userId]);
 
   const jumpToLatest = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -806,6 +876,11 @@ export function ChatRoom({
     chatChannel.bind("new-message", (msg: MessageWithUserDTO) =>
       handleNewMessage(msg),
     );
+    chatChannel.bind("read-receipt", (data: { userId: string; lastReadAt: string }) => {
+      if (!data?.userId || data.userId === userId || !data.lastReadAt) return;
+      const at = new Date(data.lastReadAt);
+      setPeerReadAt((prev) => (!prev || at > prev ? at : prev));
+    });
     chatChannel.bind("message-updated", (updatedMsg: MessageWithUserDTO) => {
       setMessages((prev) => prev.map((m) => (m.id === updatedMsg.id ? updatedMsg : m)));
     });
@@ -894,7 +969,7 @@ export function ChatRoom({
       window.removeEventListener("online", handleFocus);
       document.removeEventListener("visibilitychange", handleVisible);
     };
-  }, [roomData.id, handleNewMessage, syncMessages]);
+  }, [roomData.id, handleNewMessage, syncMessages, userId]);
 
   const handleMessageSend = useCallback(
     (msg: MessageWithUserDTO) => {
@@ -1070,6 +1145,7 @@ export function ChatRoom({
               lastReadMessageId={lastReadIdState}
               lastReadAt={lastReadAtState}
               unreadSettled={unreadSettled}
+              peerReadAt={peerReadAt}
               onLoadMore={loadMoreMessages}
               hasMore={hasMore}
               isLoadingMore={isLoadingMore}
@@ -1080,6 +1156,20 @@ export function ChatRoom({
               onRetrySend={handleRetrySend}
               onDiscardSend={handleDiscardSend}
             />
+            {canShowJump && unreadMentionIds.length > 0 && (
+              <button
+                type="button"
+                onClick={() => scrollToMessage(unreadMentionIds[0])}
+                aria-label={`${unreadMentionIds.length} sebutan belum dibaca`}
+                title="Ke sebutan berikutnya"
+                className="absolute bottom-3 right-4 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-border bg-popover text-foreground shadow-md transition-colors hover:bg-muted animate-in fade-in slide-in-from-bottom-2 duration-150"
+              >
+                <At weight="bold" className="h-4 w-4" />
+                <span className="absolute -top-1.5 -right-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold tabular-nums text-primary-foreground">
+                  {unreadMentionIds.length > 99 ? "99+" : unreadMentionIds.length}
+                </span>
+              </button>
+            )}
             {canShowJump && !isAtBottom && (
               <button
                 type="button"

@@ -7,6 +7,11 @@ export interface RoomMetadata {
   roomData: any;
   lastReadId: string | null;
   lastReadAt: string | null;
+  /**
+   * Server cursor from the last sync of this room's messages (ISO). Not an
+   * index, so adding it needs no Dexie schema version bump.
+   */
+  syncCursor?: string | null;
 }
 
 export interface ChatCacheDb {
@@ -55,6 +60,7 @@ class ClientChatCache {
   private memMessages = new Map<string, MessageWithUserDTO[]>();
   private memRooms = new Map<string, any>();
   private memLastRead = new Map<string, { id: string | null; at: Date | null }>();
+  private memCursor = new Map<string, string | null>();
 
   private evictIfNeeded() {
     if (this.memRooms.size <= MAX_CACHED_ROOMS) return;
@@ -63,6 +69,7 @@ class ClientChatCache {
     this.memRooms.delete(key);
     this.memMessages.delete(key);
     this.memLastRead.delete(key);
+    this.memCursor.delete(key);
   }
 
   getMessagesSync(roomId: string) { return this.memMessages.get(roomId); }
@@ -152,6 +159,82 @@ class ClientChatCache {
     void this.mergeMessages(roomId, [clean]);
   }
 
+  /**
+   * The cursor to send with the next sync, or null when the cached messages
+   * cannot be trusted as a base (nothing cached for the room).
+   */
+  async getSyncCursor(roomId: string): Promise<string | null> {
+    if (typeof window === "undefined") return null;
+    if (this.memCursor.has(roomId)) return this.memCursor.get(roomId) ?? null;
+    try {
+      const db = await getDb();
+      const meta = await db.roomMetadata.get(roomId);
+      const cursor = meta?.syncCursor ?? null;
+      this.memCursor.set(roomId, cursor);
+      return cursor;
+    } catch {
+      return null;
+    }
+  }
+
+  async setSyncCursor(roomId: string, cursor: Date | string | null) {
+    if (typeof window === "undefined") return;
+    const iso = cursor ? new Date(cursor).toISOString() : null;
+    this.memCursor.set(roomId, iso);
+    try {
+      const db = await getDb();
+      const existing = await db.roomMetadata.get(roomId);
+      await db.roomMetadata.put({
+        roomId,
+        roomData: existing?.roomData ?? null,
+        lastReadId: existing?.lastReadId ?? null,
+        lastReadAt: existing?.lastReadAt ?? null,
+        syncCursor: iso,
+      });
+    } catch (e) {
+      console.warn("Failed to set sync cursor in IndexedDB", e);
+    }
+  }
+
+  /**
+   * Apply a delta from the server onto the cached messages and return the
+   * resulting list (oldest first). Changed rows replace their cached copy;
+   * new rows are added unless they are older than the cached window (an old
+   * message edited while we were away must not open a gap in the history);
+   * deleted rows are dropped.
+   */
+  applyDelta(
+    roomId: string,
+    base: MessageWithUserDTO[],
+    changed: MessageWithUserDTO[],
+    deletedIds: string[],
+  ): MessageWithUserDTO[] {
+    const deleted = new Set(deletedIds);
+    const byId = new Map(base.filter((m) => !deleted.has(m.id)).map((m) => [m.id, m]));
+    const oldest = base.length ? new Date(base[0].createdAt).getTime() : -Infinity;
+    for (const m of changed) {
+      if (byId.has(m.id) || new Date(m.createdAt).getTime() >= oldest) byId.set(m.id, m);
+    }
+    const next = [...byId.values()]
+      .filter((m) => !m.isOptimistic && !m.id.startsWith("optimistic-"))
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      .slice(-MAX_MESSAGES_PER_ROOM);
+    this.memMessages.set(roomId, next);
+    void (async () => {
+      try {
+        const db = await getDb();
+        if (deletedIds.length) await db.messages.bulkDelete(deletedIds);
+        if (next.length) await db.messages.bulkPut(next);
+        const all = await db.messages.where("roomId").equals(roomId).sortBy("createdAt");
+        const { toDeleteIds } = this.pruneExcess(all);
+        if (toDeleteIds.length) await db.messages.bulkDelete(toDeleteIds);
+      } catch (e) {
+        console.warn("Failed to apply delta in IndexedDB", e);
+      }
+    })();
+    return next;
+  }
+
   async removeMessage(roomId: string, messageId: string) {
     if (typeof window === "undefined") return;
     try {
@@ -177,7 +260,8 @@ class ClientChatCache {
         roomId,
         roomData,
         lastReadId: existing?.lastReadId ?? null,
-        lastReadAt: existing?.lastReadAt ?? null
+        lastReadAt: existing?.lastReadAt ?? null,
+        syncCursor: existing?.syncCursor ?? null,
       });
     } catch (e) {
       console.warn("Failed to set room in IndexedDB", e);
@@ -204,7 +288,8 @@ class ClientChatCache {
         roomId,
         roomData: existing?.roomData ?? null,
         lastReadId: messageId,
-        lastReadAt: lastReadAt ? lastReadAt.toISOString() : (existing?.lastReadAt ?? null)
+        lastReadAt: lastReadAt ? lastReadAt.toISOString() : (existing?.lastReadAt ?? null),
+        syncCursor: existing?.syncCursor ?? null,
       });
     } catch (e) {
       console.warn("Failed to set last read in IndexedDB", e);
@@ -273,6 +358,7 @@ class ClientChatCache {
     this.memMessages.clear();
     this.memRooms.clear();
     this.memLastRead.clear();
+    this.memCursor.clear();
     try {
       const db = await getDb();
       await Promise.all([db.messages.clear(), db.roomMetadata.clear()]);
@@ -300,6 +386,7 @@ class ClientChatCache {
       this.memMessages.delete(roomId);
       this.memRooms.delete(roomId);
       this.memLastRead.delete(roomId);
+      this.memCursor.delete(roomId);
       await db.messages.where('roomId').equals(roomId).delete();
       await db.roomMetadata.delete(roomId);
     } catch (e) {

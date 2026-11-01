@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, unique, integer, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, unique, integer, jsonb, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
 export const users = pgTable("User", {
@@ -50,7 +50,13 @@ export const messages = pgTable("Message", {
     roomId: text("roomId").notNull(),
     replyTo: text("replyTo"),
     isDeleted: boolean("isDeleted").default(false).notNull(),
-});
+}, (t) => [
+    // Every per-room read is "messages of room X by time": the newest page,
+    // paging back, the sidebar's latest message / unread count, and delta
+    // sync (createdAt or updatedAt after a cursor).
+    index("Message_roomId_createdAt_idx").on(t.roomId, t.createdAt),
+    index("Message_roomId_updatedAt_idx").on(t.roomId, t.updatedAt),
+]);
 
 export const messagesRelations = relations(messages, ({ one, many }) => ({
     user: one(users, { fields: [messages.userId], references: [users.id] }),

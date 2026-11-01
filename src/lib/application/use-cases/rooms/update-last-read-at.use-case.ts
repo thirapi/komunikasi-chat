@@ -1,3 +1,4 @@
+import { roomChannel } from "@/lib/pusher/channels";
 import { IRoomRepository } from "../../repositories/room.repository.interface";
 import { IPusherService } from "../../services/pusher.service.interface";
 
@@ -25,11 +26,25 @@ export class UpdateLastReadAtUseCase {
 
     await this.roomRepository.updateLastReadAt(userId, roomId, messageId, lastReadAt);
 
+    const at = lastReadAt ?? new Date();
+
     // Broadcast read event to other devices/tabs for the same user
     await this.pusherService.triggerToUsers([userId], "room-marked-read", {
       roomId,
       messageId,
-      lastReadAt: lastReadAt ?? new Date(),
+      lastReadAt: at,
     });
+
+    // DM read receipts (✓✓): tell the other participant how far this user
+    // has read, on the room's private channel. Channels/groups are left out:
+    // per-member read state there is noisy and more of a privacy question.
+    const access = await this.roomRepository.getRoomAccess(roomId, userId);
+    if (access.isDirect) {
+      await this.pusherService.trigger(roomChannel(roomId), "read-receipt", {
+        userId,
+        messageId,
+        lastReadAt: at,
+      });
+    }
   }
 }

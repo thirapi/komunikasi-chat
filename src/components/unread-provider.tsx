@@ -5,6 +5,8 @@ import React, { createContext, useContext, useState, useCallback, useMemo, useEf
 interface UnreadRoomState {
   hasUnread: boolean;
   hasMention: boolean;
+  /** Unread messages from others (server count, then +1 per live message). */
+  count: number;
   /**
    * When this state was last decided on this device (ms). A server snapshot
    * older than that (a router.refresh rendered from data written before the
@@ -18,6 +20,7 @@ type ServerRoomUnread = {
   id: string;
   hasUnread: boolean;
   hasMention: boolean;
+  unreadCount?: number;
   lastMessageTime?: Date | string | null;
 };
 
@@ -73,7 +76,11 @@ export function UnreadProvider({ children }: { children: React.ReactNode }) {
         next[room.id] =
           local?.at !== undefined && serverLatest <= local.at
             ? local
-            : { hasUnread: room.hasUnread, hasMention: room.hasMention };
+            : {
+                hasUnread: room.hasUnread,
+                hasMention: room.hasMention,
+                count: room.hasUnread ? Math.max(1, room.unreadCount ?? 1) : 0,
+              };
       }
       return next;
     });
@@ -82,18 +89,19 @@ export function UnreadProvider({ children }: { children: React.ReactNode }) {
   const markAsRead = useCallback((roomId: string) => {
     setUnreadRooms((prev) => ({
       ...prev,
-      [roomId]: { hasUnread: false, hasMention: false, at: Date.now() },
+      [roomId]: { hasUnread: false, hasMention: false, count: 0, at: Date.now() },
     }));
   }, []);
 
   const markAsUnread = useCallback((roomId: string, hasMention = false) => {
     setUnreadRooms((prev) => {
-      const current = prev[roomId] || { hasUnread: false, hasMention: false };
+      const current = prev[roomId] || { hasUnread: false, hasMention: false, count: 0 };
       return {
         ...prev,
         [roomId]: {
           hasUnread: true,
           hasMention: hasMention || current.hasMention,
+          count: (current.hasUnread ? current.count : 0) + 1,
           // Receive time on this device's clock, same as markAsRead, so the
           // two compare cleanly regardless of server clock skew.
           at: Date.now(),

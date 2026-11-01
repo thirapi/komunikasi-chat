@@ -102,20 +102,35 @@ export function ChatRoomClientWrapper({ roomId }: { roomId: string }) {
         }
 
         // 2. Revalidate over the network in the background, in one request.
-        const snapshot = await getRoomSnapshot(roomId);
+        // With a cached copy and the cursor of its last sync, only what changed
+        // since comes back (Telegram-style catch-up) instead of the whole page.
+        const base =
+          clientChatCache.getMessagesSync(roomId) ?? (await clientChatCache.getMessages(roomId)) ?? [];
+        const cursor = base.length > 0 ? await clientChatCache.getSyncCursor(roomId) : null;
+        const snapshot = await getRoomSnapshot(roomId, cursor);
         if (!isMounted) return;
         if (snapshot.status !== "success" || !snapshot.data) {
           if (!clientChatCache.getRoomSync(roomId)) setError("Gagal memuat room");
           return;
         }
 
-        const fetchedMessages = snapshot.data.messages;
+        const { sync } = snapshot.data;
+        let fetchedMessages: MessageWithUserDTO[];
+        if (sync.mode === "delta") {
+          // Re-read the cache: live messages may have landed while we waited.
+          const latestBase = clientChatCache.getMessagesSync(roomId) ?? base;
+          fetchedMessages = clientChatCache.applyDelta(roomId, latestBase, sync.changed, sync.deletedIds);
+        } else {
+          fetchedMessages = sync.messages;
+          void clientChatCache.setMessages(roomId, fetchedMessages);
+        }
+        void clientChatCache.setSyncCursor(roomId, sync.cursor);
+
         const fetchedLastRead = snapshot.data.lastRead;
         const lastReadAt = fetchedLastRead?.at ? new Date(fetchedLastRead.at) : null;
         const roomResponse = { data: snapshot.data.room };
 
         void clientChatCache.setRoom(roomId, roomResponse.data);
-        void clientChatCache.setMessages(roomId, fetchedMessages);
         void clientChatCache.setLastRead(roomId, fetchedLastRead?.id || null, lastReadAt);
 
         setData({

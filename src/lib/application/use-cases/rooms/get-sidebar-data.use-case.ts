@@ -31,6 +31,9 @@ export class GetSidebarDataUseCase {
       // Mention presence over the unread range is resolved in SQL, so only the
       // display text still needs work here.
       const hasMention = Boolean(row.hasMention);
+      // Same range as hasUnread; at least 1 whenever the room is unread, 0
+      // when the latest message is the user's own.
+      const unreadCount = hasUnread ? Math.max(1, Number(row.unreadCount ?? 0) || 0) : 0;
 
       let lastMessageDisplay: string | undefined = row.lastMessageContent ?? undefined;
       if (lastMessageDisplay) {
@@ -71,6 +74,7 @@ export class GetSidebarDataUseCase {
           url: `/channels/${row.roomId}`,
           hasUnread,
           hasMention,
+          unreadCount,
           type: "direct" as const,
           lastMessage: lastMessageDisplay,
           lastMessageTime: row.lastMessageCreatedAt ?? undefined,
@@ -84,6 +88,7 @@ export class GetSidebarDataUseCase {
         avatar: row.roomAvatar,
         hasUnread,
         hasMention,
+        unreadCount,
         type: "channel" as const,
         lastMessage: lastMessageDisplay,
         lastMessageTime: row.lastMessageCreatedAt ?? undefined,

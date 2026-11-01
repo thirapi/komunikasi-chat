@@ -16,7 +16,7 @@ import {
 
 import { getSidebarDataController } from "@/lib/interface-adapters/controllers/rooms/get-sidebar-data.controller";
 import { getRoomByIdController } from "@/lib/interface-adapters/controllers/rooms/get-room-by-id.controller";
-import { getMessageController } from "@/lib/interface-adapters/controllers/messages/get-message.controller";
+import { syncRoomMessagesController } from "@/lib/interface-adapters/controllers/messages/sync-room-messages.controller";
 import { getLastReadAtController } from "@/lib/interface-adapters/controllers/rooms/get-last-read-at.controller";
 import { startDirectMessageController } from "@/lib/interface-adapters/controllers/rooms/start-direct-message.controller";
 import { createRoomController } from "@/lib/interface-adapters/controllers/rooms/create-room.controller";
@@ -35,7 +35,7 @@ vi.mock("@/lib/db", () => ({ db: {} }));
 
 vi.mock("@/lib/interface-adapters/controllers/rooms/get-sidebar-data.controller", () => ({ getSidebarDataController: vi.fn() }));
 vi.mock("@/lib/interface-adapters/controllers/rooms/get-room-by-id.controller", () => ({ getRoomByIdController: vi.fn() }));
-vi.mock("@/lib/interface-adapters/controllers/messages/get-message.controller", () => ({ getMessageController: vi.fn() }));
+vi.mock("@/lib/interface-adapters/controllers/messages/sync-room-messages.controller", () => ({ syncRoomMessagesController: vi.fn() }));
 vi.mock("@/lib/interface-adapters/controllers/rooms/get-last-read-at.controller", () => ({ getLastReadAtController: vi.fn() }));
 vi.mock("@/lib/interface-adapters/controllers/rooms/get-room-by-user-id.controller", () => ({ getRoomByUserIdController: vi.fn() }));
 vi.mock("@/lib/interface-adapters/controllers/rooms/start-direct-message.controller", () => ({ startDirectMessageController: vi.fn() }));
@@ -79,24 +79,32 @@ describe("room.action", () => {
   });
 
   describe("getRoomSnapshot", () => {
-    it("returns room, newest messages and the viewer's read position in one call", async () => {
+    it("returns room, messages and the viewer's read position in one call", async () => {
       const room = { id: "r1", name: "General" } as any;
-      const messages = [{ id: "m1" }, { id: "m2" }] as any;
+      const sync = { mode: "full", messages: [{ id: "m1" }, { id: "m2" }], cursor: new Date() } as any;
       const lastRead = { id: "m1", at: new Date("2026-01-01T00:00:00Z") };
       vi.mocked(getRoomByIdController).mockResolvedValueOnce(room);
-      vi.mocked(getMessageController).mockResolvedValueOnce(messages);
+      vi.mocked(syncRoomMessagesController).mockResolvedValueOnce(sync);
       vi.mocked(getLastReadAtController).mockResolvedValueOnce(lastRead);
 
       const res = await getRoomSnapshot("r1");
-      expect(res).toEqual({ status: "success", data: { room, messages, lastRead }, error: null });
-      expect(getMessageController).toHaveBeenCalledWith("r1", 50);
+      expect(res).toEqual({ status: "success", data: { room, lastRead, sync }, error: null });
+      expect(syncRoomMessagesController).toHaveBeenCalledWith("r1", null);
       // Read position is always the session user's, never a client-supplied id.
       expect(getLastReadAtController).toHaveBeenCalledWith(authState.sessionUserId, "r1");
     });
 
+    it("passes the sync cursor through", async () => {
+      vi.mocked(getRoomByIdController).mockResolvedValueOnce({ id: "r1" } as any);
+      vi.mocked(syncRoomMessagesController).mockResolvedValueOnce({ mode: "delta", changed: [], deletedIds: [], cursor: new Date() } as any);
+      vi.mocked(getLastReadAtController).mockResolvedValueOnce({ id: null, at: null });
+      await getRoomSnapshot("r1", "2026-01-01T00:00:00.000Z");
+      expect(syncRoomMessagesController).toHaveBeenCalledWith("r1", new Date("2026-01-01T00:00:00.000Z"));
+    });
+
     it("errors when the room does not exist", async () => {
       vi.mocked(getRoomByIdController).mockResolvedValueOnce(null as any);
-      vi.mocked(getMessageController).mockResolvedValueOnce([] as any);
+      vi.mocked(syncRoomMessagesController).mockResolvedValueOnce({ mode: "full", messages: [], cursor: new Date() } as any);
       vi.mocked(getLastReadAtController).mockResolvedValueOnce({ id: null, at: null });
       expect((await getRoomSnapshot("r1")).status).toBe("error");
     });
@@ -104,7 +112,7 @@ describe("room.action", () => {
     it("does not let a non-member read a private room", async () => {
       authState.access = { exists: true, isMember: false, isPublic: false, isDirect: false, ownerId: "owner1" };
       expect((await getRoomSnapshot("r1")).status).toBe("error");
-      expect(getMessageController).not.toHaveBeenCalled();
+      expect(syncRoomMessagesController).not.toHaveBeenCalled();
       expect(getLastReadAtController).not.toHaveBeenCalled();
     });
   });

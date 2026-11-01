@@ -20,6 +20,14 @@ Komponen `chat-room.tsx` mendengarkan event *real-time* dari Pusher (`chat-{room
 - **Incoming Messages**: Di *append* ke state memori `messages` dan serta-merta ditembakkan masuk ke IndexedDB `db.messages.bulkPut([msg])` melalui pemanggilan `clientChatCache.mergeMessages()`.
 - **Deletion**: Saat menangkap event penghapusan (`message-deleted`), pesan tak sekadar dihilangkan dari state React, tapi juga otomatis ditarik bersih dari lokal (`clientChatCache.removeMessage()`).
 
+### 4. Sinkronisasi Delta (cara Telegram Web)
+Membuka room yang sudah ada di cache tidak lagi mengunduh ulang 50 pesan terakhir.
+- Setiap sinkronisasi mengembalikan **cursor** dari server (`syncCursor`, disimpan per room di `roomMetadata`; sengaja dibuat sedikit mundur, 10 detik, untuk mengakomodasi beda jam DB dan server).
+- `getRoomSnapshot(roomId, cursor)` mengirim hanya pesan yang **dibuat atau berubah** sejak cursor (`createdAt` atau `updatedAt` lebih baru), termasuk yang dihapus (soft delete) supaya ikut dibuang dari cache. Kalau lebih dari 50 yang berubah, server mengirim halaman penuh.
+- Edit dan hapus otomatis memperbarui `Message.updatedAt`. Reaksi tersimpan di tabel lain (dan penghapusannya hard delete), jadi `ToggleReactionUseCase` memanggil `touchMessage` agar perubahan reaksi ikut tertangkap.
+- `clientChatCache.applyDelta` menggabungkan hasilnya: baris yang berubah menggantikan salinan lama, baris baru ditambahkan, tapi pesan lama yang diedit dan berada di luar jendela cache tidak disisipkan (agar tidak menimbulkan celah riwayat).
+- `syncMessages` di `chat-room.tsx` (saat reconnect, fokus, atau online) memakai cursor yang sama, jadi edit, hapus, dan reaksi selama socket putus ikut tersusul.
+
 ## Arsitektur Data Lokal (`ClientChatCache`)
 Data model lokal dibentuk memakai **Dexie** di atas IndexedDB dengan namespace `KomunikasiClientDB`:
 - `messages` (Table): Menyimpan array `MessageWithUserDTO`. Dimanajemen menggunakan policy limit **50 pesan** per roomId agar konsumsi stroge peramban *(browser)* tidak membengkak.

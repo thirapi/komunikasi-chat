@@ -15,6 +15,9 @@ export class ToggleReactionUseCase {
     if (!roomId) throw new Error("Pesan tidak ditemukan");
 
     const result = await this.reactionRepository.toggleReaction(userId, messageId, emoji);
+    // Reactions live in their own table; bump the message so a cached client
+    // catching up via delta sync sees the change (removals leave no row).
+    await this.messageRepository.touchMessage(messageId);
 
     // Broadcast realtime event
     await this.pusherService.trigger(roomChannel(roomId), "message-reaction", {

@@ -182,6 +182,7 @@ export function AppSidebar({
         id: r.id,
         hasUnread: r.hasUnread,
         hasMention: (r as any).hasMention,
+        unreadCount: r.unreadCount,
         lastMessageTime: r.lastMessageTime,
       }))
     );
@@ -207,6 +208,7 @@ export function AppSidebar({
       icon: Hash,
       hasUnread: unreadRooms[room.id]?.hasUnread ?? room.hasUnread,
       hasMention: unreadRooms[room.id]?.hasMention ?? room.hasMention,
+      unreadCount: unreadRooms[room.id]?.count ?? room.unreadCount ?? 0,
       ...liveActivity(room),
     }));
   }, [groupRooms, unreadRooms, liveActivity]);
@@ -219,6 +221,7 @@ export function AppSidebar({
       icon: User,
       hasUnread: unreadRooms[room.id]?.hasUnread ?? room.hasUnread,
       hasMention: unreadRooms[room.id]?.hasMention ?? room.hasMention,
+      unreadCount: unreadRooms[room.id]?.count ?? room.unreadCount ?? 0,
       ...liveActivity(room),
     }));
   }, [directRooms, unreadRooms, liveActivity]);
@@ -574,17 +577,24 @@ export function AppSidebar({
                           {chat.lastMessage ? renderLastMessage(chat.lastMessage) : "Belum ada pesan"}
                         </span>
 
-                        {chat.hasUnread &&
-                          (chat.hasMention ? (
+                        {chat.hasUnread && (
+                          <span className="flex shrink-0 items-center gap-1">
+                            {chat.hasMention && (
+                              <span
+                                className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold text-primary-foreground"
+                                aria-label="Kamu disebut"
+                              >
+                                @
+                              </span>
+                            )}
                             <span
-                              className="flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold text-primary-foreground"
-                              aria-label="Kamu disebut"
+                              className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold tabular-nums text-primary-foreground"
+                              aria-label={`${chat.unreadCount} pesan belum dibaca`}
                             >
-                              @
+                              {chat.unreadCount > 99 ? "99+" : Math.max(1, chat.unreadCount)}
                             </span>
-                          ) : (
-                            <span className="size-2 shrink-0 rounded-full bg-primary" aria-label="Belum dibaca" />
-                          ))}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </Link>

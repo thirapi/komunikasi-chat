@@ -134,7 +134,20 @@ export class RoomRepository implements IRoomRepository {
             AND lm."id" IS NOT NULL
             AND lm."userId" <> ${userId}
             AND date_trunc('milliseconds', lm."createdAt") > COALESCE(me."lastReadAt", to_timestamp(0))
-        ) AS "hasMention"
+        ) AS "hasMention",
+        -- Unread messages from others, capped: the badge shows "99+" past
+        -- that, so counting further would only cost time.
+        (
+          SELECT COUNT(*)::int FROM (
+            SELECT 1
+            FROM "Message" uc
+            WHERE uc."roomId" = r."id"
+              AND uc."isDeleted" = false
+              AND uc."userId" <> ${userId}
+              AND date_trunc('milliseconds', uc."createdAt") > COALESCE(me."lastReadAt", to_timestamp(0))
+            LIMIT 100
+          ) unread
+        ) AS "unreadCount"
       FROM "Room" r
       JOIN "RoomParticipant" me
         ON me."roomId" = r."id" AND me."userId" = ${userId}

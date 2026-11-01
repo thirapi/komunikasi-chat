@@ -56,6 +56,11 @@ Untuk menjaga konsistensi antara tampilan chat dan sidebar:
 - `getRoomSnapshot` (room.action.ts) mengambil room, 50 pesan terbaru, dan read position dalam **satu** server action (server action Next.js antre satu per satu, sebelumnya 3 round trip berurutan).
 - `RealtimeNotificationListener` menulis pesan dari room lain ke cache memori (`clientChatCache.appendLive`), sehingga room yang dibuka dari sidebar langsung menampilkan pesan barunya di frame pertama.
 
+### 9. Jumlah unread, lompat ke sebutan, dan tanda dibaca
+- **Angka unread**: query sidebar menghitung pesan orang lain setelah `lastReadAt` (dibatasi 100, tampil "99+"). `UnreadProvider` menyimpan `count` per room: dari server, +1 per pesan realtime, 0 saat dibaca.
+- **Tombol "@"** di room: sebutan untuk user ini (atau `@everyone`) dari orang lain yang lebih baru dari posisi baca. Klik melompat ke sebutan berikutnya; begitu terbaca otomatis hilang dari hitungan.
+- **Tanda dibaca (DM saja)**: `UpdateLastReadAtUseCase` juga mengirim event `read-receipt` ke channel privat room bila room adalah DM. Pesan milik sendiri menampilkan ✓ (terkirim) atau ✓✓ (dibaca) berdasarkan `lastReadAt` lawan bicara. Channel/grup sengaja tidak ikut. Belum ada pengaturan privasi untuk mematikannya.
+
 ## Aturan Pengembangan (Guardrails)
 1. **Prioritas Kebenaran (Timestamp-First)**: Selalu gunakan `lastReadAt` (timestamp) sebagai *Primary Source of Truth*. Update hanya dilakukan jika timestamp baru **lebih besar** (lebih baru) dari yang tersimpan. Hal ini mencegah *stale data* dari server menimpa update lokal yang cepat.
 2. **Auto-Mark at Bottom**: Jika user berada di dasar chat (`isAtBottom: true`), setiap pesan baru yang masuk (via Pusher) harus otomatis ditandai sebagai dibaca tanpa menunggu interaksi scroll tambahan.

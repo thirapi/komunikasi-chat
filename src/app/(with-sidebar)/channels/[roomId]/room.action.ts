@@ -11,9 +11,9 @@ import { ServerResponse } from "@/lib/entities/models/response.model";
 import { RoomWithParticipantsDTO } from "@/lib/entities/models/room.model";
 import { createRoomController } from "@/lib/interface-adapters/controllers/rooms/create-room.controller";
 import { getRoomByIdController } from "@/lib/interface-adapters/controllers/rooms/get-room-by-id.controller";
-import { getMessageController } from "@/lib/interface-adapters/controllers/messages/get-message.controller";
+import { syncRoomMessagesController } from "@/lib/interface-adapters/controllers/messages/sync-room-messages.controller";
+import type { RoomSync } from "@/lib/application/use-cases/messages/sync-room-messages.use-case";
 import { getLastReadAtController } from "@/lib/interface-adapters/controllers/rooms/get-last-read-at.controller";
-import { MessageWithUserDTO } from "@/lib/entities/models/message.model";
 import { getRoomByUserIdController } from "@/lib/interface-adapters/controllers/rooms/get-room-by-user-id.controller";
 import { getSidebarDataController } from "@/lib/interface-adapters/controllers/rooms/get-sidebar-data.controller";
 import { SidebarRoomDTO } from "@/lib/entities/models/room.model";
@@ -75,36 +75,40 @@ export const getRoom = async (
 };
 
 /**
- * Everything a room needs to open — metadata, the newest page of messages and
- * the viewer's read position — in one request.
+ * Everything a room needs to open — metadata, its messages and the viewer's
+ * read position — in one request.
  *
  * Next.js runs server actions from one client one at a time, so opening a room
- * with getRoom → getMessage → getLastReadAt cost three sequential round trips
- * (more if a read-state update was queued in front of them). That gap is what
- * made a room open on its stale cached view and only show new messages a beat
- * later. One action, with the three reads run in parallel on the server.
+ * with getRoom → getMessage → getLastReadAt cost three sequential round trips.
+ * One action, with the reads run in parallel on the server.
+ *
+ * `since` is the cursor from this room's previous sync. With it, only messages
+ * created or changed since come back (`sync.mode === "delta"`), to be applied
+ * on top of the client cache; without it, or when too much changed, the newest
+ * page comes back in full.
  */
 export const getRoomSnapshot = async (
-  roomId: string
+  roomId: string,
+  since?: Date | string | null
 ): Promise<
   ServerResponse<{
     room: RoomWithParticipantsDTO;
-    messages: MessageWithUserDTO[];
     lastRead: { id: string | null; at: Date | null };
+    sync: RoomSync;
   } | null>
 > => {
   try {
     const viewerId = await requireReader();
     await assertCanReadRoom(roomId, viewerId);
-    const [room, messages, lastRead] = await Promise.all([
+    const [room, sync, lastRead] = await Promise.all([
       getRoomByIdController(roomId),
-      getMessageController(roomId, 50),
+      syncRoomMessagesController(roomId, since ? new Date(since) : null),
       getLastReadAtController(viewerId, roomId),
     ]);
     if (!room) {
       return { status: "error", data: null, error: { message: "Room tidak ditemukan", type: "NotFound" } };
     }
-    return { status: "success", data: { room, messages: messages ?? [], lastRead }, error: null };
+    return { status: "success", data: { room, lastRead, sync }, error: null };
   } catch (err: any) {
     console.error("Action Error:", err);
     return {
