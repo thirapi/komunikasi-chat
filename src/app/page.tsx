@@ -61,13 +61,13 @@ export default async function House() {
 
           <div className="flex max-w-sm flex-col gap-3">
             <p className="text-sm leading-relaxed text-muted-foreground">
-              Platform pesan instan untuk tim. Cepat, tanpa iklan, dan data
-              Anda tidak ditulis ke server mana pun kecuali milik Anda sendiri.
+              Platform pesan instan untuk tim. Cepat, tanpa iklan, dan
+              langsung bisa dipakai dari browser.
             </p>
             <ul className="flex flex-col gap-2 text-sm text-muted-foreground">
               {[
                 "Pesan real-time dan channel",
-                "Sinkron antrean tanpa internet",
+                "Reaksi, balasan, dan lampiran",
                 "Akses langsung dari browser",
               ].map((feature) => (
                 <li key={feature} className="flex items-center gap-2.5">
