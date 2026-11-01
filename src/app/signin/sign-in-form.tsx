@@ -1,18 +1,9 @@
 "use client";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -22,175 +13,121 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useMemo, useState, Suspense } from "react";
+import { useState } from "react";
 import { signInUser } from "@/app/auth.action";
 import { useSearchParams } from "next/navigation";
-import { ServerResponse } from "@/lib/entities/models/response.model";
-import { XCircle, Eye, EyeSlash, Key, Link, CircleNotch, User } from "@phosphor-icons/react/dist/ssr";
+import { Eye, EyeSlash, CircleNotch } from "@phosphor-icons/react/dist/ssr";
 
 const formSchema = z.object({
-  username: z.string().min(3),
-  password: z.string().min(4),
+  username: z.string().min(3, "Username minimal 3 karakter"),
+  password: z.string().min(4, "Password minimal 4 karakter"),
 });
-
-interface SignInFormProps extends React.ComponentPropsWithoutRef<"div"> {
-  onToggleMode?: () => void;
-  isEmbedded?: boolean;
-}
 
 export function SignInForm({
   className,
-  onToggleMode,
-  isEmbedded,
   ...props
-}: SignInFormProps) {
-  const [formStatus, setFormStatus] = useState<"idle" | "pending" | "error">(
-    "idle"
-  );
+}: React.ComponentPropsWithoutRef<"div">) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      username: "",
-      password: "",
-    },
+    defaultValues: { username: "", password: "" },
   });
 
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl");
+  const signUpHref = callbackUrl
+    ? `/signup?callbackUrl=${encodeURIComponent(callbackUrl)}`
+    : "/signup";
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    setFormStatus("pending");
+    setPending(true);
+    setError(null);
     const response = await signInUser(values.username, values.password, callbackUrl ?? undefined);
-
+    // On success the action redirects, so only the error path returns here.
     if (response?.status === "error") {
-      if (response.error) {
-        toast.error(response.error.message, {
-          description:
-            response.error.type === "InputParsedError"
-              ? JSON.stringify(response.error.meta)
-              : undefined,
-        });
-      }
-      setFormStatus("error");
-    } else {
-      setFormStatus("idle");
+      setError(response.error?.message ?? "Gagal masuk. Coba lagi.");
     }
+    setPending(false);
   };
 
   return (
-    <div className={cn("flex flex-col gap-6", className)} {...props}>
-      {/* No shadow override: Card already carries shadow-sm, and layering a
-          larger one on top only muddied the edge on the landing page where the
-          form sits flat against the background. */}
-      <Card className="border-border">
-        <CardHeader>
-          <CardTitle className="text-2xl font-bold">Login</CardTitle>
-          <CardDescription>
-            Enter your username below to login to your account
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)}>
-              <div className="flex flex-col gap-6">
-                <div className="grid gap-2">
-                  <FormField
-                    control={form.control}
-                    name="username"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Username</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <User className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
-                            <Input
-                              placeholder="Enter your username"
-                              className="pl-10"
-                              {...field}
-                            />
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <FormField
-                    control={form.control}
-                    name="password"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Password</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <Key className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
-                            <Input
-                              type={showPassword ? "text" : "password"}
-                              placeholder="••••••••"
-                              className="pl-10 pr-10"
-                              {...field}
-                            />
-                            <button
-                              type="button"
-                              className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
-                              onClick={() => setShowPassword(!showPassword)}
-                              tabIndex={-1}
-                            >
-                              {showPassword ? (
-                                <EyeSlash weight="duotone" className="h-5 w-5" />
-                              ) : (
-                                <Eye weight="duotone" className="h-5 w-5" />
-                              )}
-                            </button>
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+    <div className={cn("flex flex-col gap-8", className)} {...props}>
+      <div className="flex flex-col gap-2">
+        <h1 className="text-2xl font-semibold tracking-tight">Masuk</h1>
+        <p className="text-sm text-muted-foreground">
+          Gunakan username dan password akunmu untuk melanjutkan.
+        </p>
+      </div>
 
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={formStatus === "pending"}
-                >
-                  {formStatus === "pending" ? (
-                    <>
-                      <span>Sign In</span>
-                      <CircleNotch weight="duotone" className="h-4 w-4 animate-spin" />
-                    </>
-                  ) : (
-                    "Sign In"
-                  )}
-                </Button>
-              </div>
-              <div className="mt-4 text-center text-sm">
-                Don&apos;t have an account?{" "}
-                {onToggleMode ? (
-                  <button
-                    type="button"
-                    onClick={onToggleMode}
-                    className="underline underline-offset-4 hover:text-primary"
-                  >
-                    Sign up
-                  </button>
-                ) : (
-                  <a 
-                    href={callbackUrl ? `/signup?callbackUrl=${encodeURIComponent(callbackUrl)}` : "/signup"} 
-                    className="underline underline-offset-4"
-                  >
-                    Sign up
-                  </a>
-                )}
-              </div>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="flex flex-col gap-5">
+          <FormField
+            control={form.control}
+            name="username"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Username</FormLabel>
+                <FormControl>
+                  <Input autoComplete="username" autoCapitalize="none" spellCheck={false} {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="password"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Password</FormLabel>
+                <FormControl>
+                  <div className="relative">
+                    <Input
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="current-password"
+                      className="pr-10"
+                      {...field}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+                      aria-pressed={showPassword}
+                      className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-md text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                    >
+                      {showPassword ? (
+                        <EyeSlash aria-hidden className="size-4" />
+                      ) : (
+                        <Eye aria-hidden className="size-4" />
+                      )}
+                    </button>
+                  </div>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <p role="alert" aria-live="polite" className={cn("text-sm text-destructive", !error && "sr-only")}>
+            {error}
+          </p>
+
+          <Button type="submit" className="w-full" disabled={pending}>
+            {pending && <CircleNotch aria-hidden className="size-4 animate-spin" />}
+            {pending ? "Memproses…" : "Masuk"}
+          </Button>
+        </form>
+      </Form>
+
+      <p className="text-sm text-muted-foreground">
+        Belum punya akun?{" "}
+        <a href={signUpHref} className="text-foreground underline underline-offset-4 hover:text-primary">
+          Daftar
+        </a>
+      </p>
     </div>
   );
 }
