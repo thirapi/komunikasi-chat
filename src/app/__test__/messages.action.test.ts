@@ -8,6 +8,7 @@ import {
   toggleReactionAction,
   setTypingStatusAction,
   uploadFileAction,
+  createUploadUrlAction,
 } from "../(with-sidebar)/channels/[roomId]/messages.action";
 
 import { sendMessageController } from "@/lib/interface-adapters/controllers/messages/send-message.controller";
@@ -34,7 +35,10 @@ vi.mock("@/lib/interface-adapters/controllers/messages/typing.controller", () =>
   startTypingController: vi.fn(),
   stopTypingController: vi.fn(),
 }));
-vi.mock("@/lib/interface-adapters/controllers/storage/upload-file.controller", () => ({ uploadFileController: vi.fn() }));
+vi.mock("@/lib/interface-adapters/controllers/storage/upload-file.controller", () => ({
+  uploadFileController: vi.fn(),
+  createUploadUrlController: vi.fn().mockResolvedValue({ uploadUrl: "u", headers: {}, fileurl: "f", filename: "n", key: "k" }),
+}));
 
 describe("messages.action", () => {
   beforeEach(() => {
@@ -197,6 +201,28 @@ describe("messages.action", () => {
       const res = await uploadFileAction(fd, "channels/r1");
       expect(res.status).toBe("error");
       expect(uploadFileController).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("createUploadUrlAction", () => {
+    const input = { destination: "channels/r1", filename: "v.mp4", contentType: "video/mp4", size: 20 * 1024 * 1024 };
+
+    it("issues a URL for a member's room folder", async () => {
+      expect((await createUploadUrlAction(input)).status).toBe("success");
+    });
+
+    it("requires a session", async () => {
+      authState.sessionUserId = null;
+      expect((await createUploadUrlAction(input)).status).toBe("error");
+    });
+
+    it("refuses folders outside the allow-list", async () => {
+      expect((await createUploadUrlAction({ ...input, destination: "../secret" })).status).toBe("error");
+    });
+
+    it("refuses another room's folder", async () => {
+      authState.access = { exists: true, isMember: false, isPublic: true, isDirect: false, ownerId: "o" };
+      expect((await createUploadUrlAction(input)).status).toBe("error");
     });
   });
 });

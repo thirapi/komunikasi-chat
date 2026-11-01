@@ -22,7 +22,7 @@ import {
 } from "@/lib/interface-adapters/controllers/messages/typing.controller";
 import { updateLastReadAtController } from "@/lib/interface-adapters/controllers/rooms/update-last-read-at.controller";
 import { getLastReadAtController } from "@/lib/interface-adapters/controllers/rooms/get-last-read-at.controller";
-import { uploadFileController } from "@/lib/interface-adapters/controllers/storage/upload-file.controller";
+import { uploadFileController, createUploadUrlController } from "@/lib/interface-adapters/controllers/storage/upload-file.controller";
 import { MessageWithUserDTO } from "@/lib/entities/models/message.model";
 import { revalidatePath } from "next/cache";
 import { deleteMessageController } from "@/lib/interface-adapters/controllers/messages/delete-message.controller";
@@ -236,6 +236,43 @@ export const getMessage = async (roomId: string, limit?: number, before?: Date, 
   }
 };
 
+/** Same folder rules as uploadFileAction. */
+async function assertUploadDestination(destination: string | undefined, actorId: string) {
+  const channelMatch = destination?.match(/^channels\/([A-Za-z0-9_-]+)$/);
+  if (channelMatch) {
+    await assertRoomMember(channelMatch[1], actorId);
+  } else if (!destination || !UPLOAD_FOLDERS.has(destination)) {
+    throw new AuthorizationError("Tujuan upload tidak valid");
+  }
+}
+
+/**
+ * Presigned URL for uploading straight from the browser to R2. Files never
+ * pass through this server, so the ~4.5 MB Vercel request limit does not
+ * apply. Same session and folder checks as uploadFileAction; type and size
+ * are validated and baked into the signature.
+ */
+export const createUploadUrlAction = async (input: {
+  destination: string;
+  filename: string;
+  contentType: string;
+  size: number;
+}): Promise<ServerResponse<{ uploadUrl: string; headers: Record<string, string>; fileurl: string; filename: string; key: string } | null>> => {
+  try {
+    const actorId = await requireWriter();
+    await assertUploadDestination(input.destination, actorId);
+    const data = await createUploadUrlController(input);
+    return { status: "success", data, error: null };
+  } catch (err: any) {
+    console.error("Action Error:", err);
+    return {
+      status: "error",
+      data: null,
+      error: { message: err.message || "Gagal menyiapkan upload", type: err.name },
+    };
+  }
+};
+
 export const uploadFileAction = async (
   formData: FormData,
   destination?: string
@@ -244,12 +281,7 @@ export const uploadFileAction = async (
     const actorId = await requireWriter();
     // Uploads land in a fixed set of folders. A channel folder additionally
     // requires membership, so nobody can write into another room's storage.
-    const channelMatch = destination?.match(/^channels\/([A-Za-z0-9_-]+)$/);
-    if (channelMatch) {
-      await assertRoomMember(channelMatch[1], actorId);
-    } else if (destination && !UPLOAD_FOLDERS.has(destination)) {
-      throw new AuthorizationError("Tujuan upload tidak valid");
-    }
+    if (destination) await assertUploadDestination(destination, actorId);
     const file = formData.get("file") as File;
     if (!file) {
       return {

@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { CaretLeft, CaretRight, Camera, CircleNotch, User, Key, PaintBrush, Info, Desktop, Sun, Moon, Check } from "@phosphor-icons/react/dist/ssr";
 import { updateUserAction, changePasswordAction } from "../user.action";
-import { uploadFileAction } from "../channels/[roomId]/messages.action";
+import { uploadFileResult } from "@/lib/chat/upload";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -74,9 +74,7 @@ function ProfileForm({ user }: { user: NonNullable<SettingsViewProps["user"]> })
         if (file.size > 2 * 1024 * 1024) return toast.error("Ukuran file maksimal 2 MB");
         setIsUploading(true);
         try {
-            const formData = new FormData();
-            formData.append("file", file);
-            const response = await uploadFileAction(formData, "avatars");
+            const response = await uploadFileResult(file, "avatars");
             if (response.status === "success" && response.data) {
                 setAvatar(response.data.fileurl);
                 toast.success("Foto diunggah. Simpan untuk menerapkan.");
