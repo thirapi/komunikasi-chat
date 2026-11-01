@@ -9,7 +9,7 @@ export default async function SignInPage() {
   if (await getUserSession()) redirect("/channels/default");
 
   return (
-    <AuthShell switchTo={{ href: "/signup", label: "Daftar" }}>
+    <AuthShell switchTo={{ href: "/signup", label: "Daftar", hint: "Belum punya akun?" }}>
       <SignInForm />
     </AuthShell>
   );
