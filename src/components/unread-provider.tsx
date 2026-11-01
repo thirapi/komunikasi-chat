@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from "react";
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from "react";
 
 interface UnreadRoomState {
   hasUnread: boolean;
@@ -24,6 +24,12 @@ type ServerRoomUnread = {
   lastMessageTime?: Date | string | null;
 };
 
+/** Someone typing in a room, for the chat list ("Budi sedang mengetik…"). */
+export interface RoomTyping {
+  userId: string;
+  name: string;
+}
+
 export interface RoomActivity {
   lastMessage: string;
   lastMessageTime: Date;
@@ -34,6 +40,11 @@ interface UnreadContextType {
   /** Latest message per room seen live (newer than the server's sidebar data). */
   roomActivity: Record<string, RoomActivity>;
   recordActivity: (roomId: string, lastMessage: string, at: Date | string) => void;
+  /** Forget the live preview (its message was deleted); the server's applies again. */
+  clearActivity: (roomId: string) => void;
+  roomTyping: Record<string, RoomTyping>;
+  /** name = null clears it (typing stopped or their message arrived). */
+  setRoomTyping: (roomId: string, userId: string, name: string | null) => void;
   markAsRead: (roomId: string) => void;
   markAsUnread: (roomId: string, hasMention?: boolean) => void;
   initializeUnread: (rooms: ServerRoomUnread[]) => void;
@@ -44,6 +55,40 @@ const UnreadContext = createContext<UnreadContextType | undefined>(undefined);
 export function UnreadProvider({ children }: { children: React.ReactNode }) {
   const [unreadRooms, setUnreadRooms] = useState<Record<string, UnreadRoomState>>({});
   const [roomActivity, setRoomActivity] = useState<Record<string, RoomActivity>>({});
+  const [roomTyping, setRoomTypingState] = useState<Record<string, RoomTyping>>({});
+  const typingTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+
+  const setRoomTyping = useCallback((roomId: string, userId: string, name: string | null) => {
+    const clear = () =>
+      setRoomTypingState((prev) => {
+        if (prev[roomId]?.userId !== userId) return prev;
+        const next = { ...prev };
+        delete next[roomId];
+        return next;
+      });
+    const existing = typingTimers.current.get(roomId);
+    if (existing) clearTimeout(existing);
+    typingTimers.current.delete(roomId);
+    if (name === null) {
+      clear();
+      return;
+    }
+    setRoomTypingState((prev) =>
+      prev[roomId]?.userId === userId && prev[roomId]?.name === name
+        ? prev
+        : { ...prev, [roomId]: { userId, name } },
+    );
+    // Typing is sent on each pause and stopped after 5s idle; if the stop
+    // event is lost (tab closed, network), expire it on our own.
+    typingTimers.current.set(roomId, setTimeout(() => {
+      typingTimers.current.delete(roomId);
+      clear();
+    }, 6000));
+  }, []);
+  useEffect(() => {
+    const timers = typingTimers.current;
+    return () => timers.forEach(clearTimeout);
+  }, []);
 
   const recordActivity = useCallback((roomId: string, lastMessage: string, at: Date | string) => {
     const time = new Date(at);
@@ -51,6 +96,15 @@ export function UnreadProvider({ children }: { children: React.ReactNode }) {
       const current = prev[roomId];
       if (current && current.lastMessageTime.getTime() > time.getTime()) return prev;
       return { ...prev, [roomId]: { lastMessage, lastMessageTime: time } };
+    });
+  }, []);
+
+  const clearActivity = useCallback((roomId: string) => {
+    setRoomActivity((prev) => {
+      if (!(roomId in prev)) return prev;
+      const next = { ...prev };
+      delete next[roomId];
+      return next;
     });
   }, []);
 
@@ -111,8 +165,8 @@ export function UnreadProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ unreadRooms, roomActivity, recordActivity, markAsRead, markAsUnread, initializeUnread }),
-    [unreadRooms, roomActivity, recordActivity, markAsRead, markAsUnread, initializeUnread],
+    () => ({ unreadRooms, roomActivity, recordActivity, clearActivity, roomTyping, setRoomTyping, markAsRead, markAsUnread, initializeUnread }),
+    [unreadRooms, roomActivity, recordActivity, clearActivity, roomTyping, setRoomTyping, markAsRead, markAsUnread, initializeUnread],
   );
 
   return (

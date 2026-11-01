@@ -11,6 +11,23 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+#### Typing in the chat list
+
+"sedang mengetik…" (or "Budi sedang mengetik…" in a channel) replaces the
+preview while someone types, for DMs and rooms of up to 10 members; bigger
+rooms keep the indicator inside the room only. Typing also goes to each
+member's private channel, in one Pusher call per 100 channels
+(`triggerToUsers` used to make one call per user).
+
+#### Mobile gestures and keyboard
+
+- Swipe a message right to reply (the row follows the finger, with a reply
+  hint and a haptic tick); long-press opens the message actions. A plain tap
+  used to open them, which fired on stray taps while scrolling.
+- The composer stays right above the on-screen keyboard: Android through
+  `interactive-widget=resizes-content`, iOS Safari through a
+  `visualViewport`-driven `--app-height`.
+
 #### Unread counts, mention jump and read receipts
 
 - The chat list shows how many messages are unread ("99+" past that) instead
@@ -80,6 +97,20 @@ sidebar, search and dialogs were restyled consistently with live previews and
 simpler unread/mention indicators.
 
 ### Fixed
+
+#### No more full-page refresh for chat-list updates
+
+A deleted message and a newly started DM used to call `router.refresh()`,
+re-rendering the whole server tree (and flickering the sidebar). The chat list
+now re-fetches itself with one `getSidebarData` call, coalesced across bursts,
+so previews and unread counts stay correct after a deletion. The deleter's own
+preview is updated too; they get no notification for their own delete.
+
+#### Pasting chat as a code block
+
+Casual chat such as "oke siap :)" or a list of links was wrapped in a code
+fence. Code copied from GitHub, StackOverflow, docs sites or JetBrains IDEs is
+now recognised from the clipboard's `<pre>`/`<code>` HTML, with its language.
 
 #### Opening a chat, unread state and auto-scroll
 

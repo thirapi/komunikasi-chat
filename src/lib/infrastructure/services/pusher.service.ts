@@ -34,8 +34,10 @@ export class PusherService implements IPusherService {
   }
 
   async triggerToUsers(userIds: string[], event: string, data: any) {
-    await Promise.all(
-      userIds.map((id) => pusher.trigger(userChannel(id), event, data))
-    );
+    // One API call per 100 channels (Pusher's limit) instead of one per user.
+    const channels = [...new Set(userIds)].map(userChannel);
+    const batches: string[][] = [];
+    for (let i = 0; i < channels.length; i += 100) batches.push(channels.slice(i, i + 100));
+    await Promise.all(batches.map((batch) => pusher.trigger(batch, event, data)));
   }
 }

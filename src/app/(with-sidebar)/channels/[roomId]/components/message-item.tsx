@@ -127,6 +127,8 @@ import { ArrowBendUpLeft, File, DownloadSimple, Trash, Copy, PencilSimple, Check
 import { Button } from "@/components/ui/button";
 import { useState, useMemo, useEffect, useRef, useCallback, memo } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { hapticLight, hapticMedium } from "@/lib/native/haptics";
+import { useMessageGestures } from "./hooks/use-message-gestures";
 import {
   Tooltip,
   TooltipContent,
@@ -733,6 +735,20 @@ const getFileName = (url: string) => {
   const isOnline = onlineUserIds.includes(message.userId);
   const [isHovered, setIsHovered] = useState(false);
 
+  // Touch: swipe right to reply, long-press for the actions (a plain tap used
+  // to open them, which fired on every stray tap while scrolling).
+  const gestures = useMessageGestures({
+    enabled: !!isMobile && !isEditing && !message.isOptimistic,
+    onSwipeReply: () => {
+      hapticLight();
+      onReply(message);
+    },
+    onLongPress: () => {
+      hapticMedium();
+      setShowMobileActions(true);
+    },
+  });
+
   // A reply always opens a new visual group, even inside a run of messages from
   // the same sender, so the quoted line has a header to hang from.
   const showHeader = !isContinuation || !!message.replyToMessage;
@@ -782,14 +798,38 @@ const getFileName = (url: string) => {
         isHighlighted && "bg-primary/10 hover:bg-primary/10 shadow-[inset_2px_0_0_var(--primary)]",
         showMobileActions && isMobile && "bg-muted/50",
         isEditing && "bg-muted/40",
-        message.isOptimistic && !message.sendError && "opacity-60"
+        message.isOptimistic && !message.sendError && "opacity-60",
+        // pan-y: vertical drags scroll the chat, horizontal ones are ours.
+        // No text selection/callout on touch: long-press opens the actions
+        // (which include Copy) instead of the system menu.
+        isMobile && "touch-pan-y select-none [-webkit-touch-callout:none]",
+        isMobile && gestures.offset === 0 && "transition-transform duration-200 ease-out"
       )}
+      style={gestures.offset ? { transform: `translateX(${gestures.offset}px)` } : undefined}
+      {...gestures.handlers}
       onClick={() => {
-        if (isMobile && !isEditing) setShowMobileActions(!showMobileActions);
+        if (gestures.consumeGestureClick()) return;
+        // A tap elsewhere on the row closes the actions; opening is long-press.
+        if (isMobile && showMobileActions) setShowMobileActions(false);
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
+      {gestures.offset > 0 && (
+        // Reply hint at the screen edge (counter-translated so it stays put
+        // while the row slides), filling in as the swipe nears the commit point.
+        <span
+          aria-hidden
+          className="pointer-events-none absolute left-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-muted text-foreground"
+          style={{
+            transform: `translate(${-gestures.offset}px, -50%) scale(${Math.min(1, 0.6 + gestures.offset / 140)})`,
+            opacity: Math.min(1, gestures.offset / 56),
+          }}
+        >
+          <ArrowBendUpLeft weight="bold" className="h-3.5 w-3.5" />
+        </span>
+      )}
+
       {/* Quoted message, Discord-style: a thin spine from the avatar column
           curls into a one-line preview of the message being answered. */}
       {message.replyToMessage && (

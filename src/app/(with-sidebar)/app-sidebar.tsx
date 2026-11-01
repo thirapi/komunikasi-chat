@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { SidebarRoomDTO } from "@/lib/entities/models/room.model";
-import { createRoom } from "./channels/[roomId]/room.action";
+import { createRoom, getSidebarData } from "./channels/[roomId]/room.action";
 import { useUnread } from "@/components/unread-provider";
 import { usePresence } from "@/components/presence-provider";
 import { useCustomEmojis } from "@/components/emoji-provider";
@@ -95,16 +95,54 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 export function AppSidebar({
   user,
   checkRole,
-  groupRooms,
-  directRooms,
+  groupRooms: serverGroupRooms,
+  directRooms: serverDirectRooms,
   ...props
 }: AppSidebarProps) {
+  // The chat list can be re-fetched on the client ("refresh-sidebar": a DM
+  // someone just started, a deleted message changing a preview or unread
+  // count). That used to be router.refresh(), which re-rendered the whole
+  // server tree; now it is one getSidebarData call. A newer server render
+  // (props change) takes over again.
+  const [liveRooms, setLiveRooms] = React.useState<{
+    channels: SidebarRoomDTO[];
+    directMessages: SidebarRoomDTO[];
+  } | null>(null);
+  React.useEffect(() => setLiveRooms(null), [serverGroupRooms, serverDirectRooms]);
+  const groupRooms = liveRooms?.channels ?? serverGroupRooms;
+  const directRooms = liveRooms?.directMessages ?? serverDirectRooms;
+
+  const sidebarRefreshRef = React.useRef<{ timer: ReturnType<typeof setTimeout> | null; seq: number }>({
+    timer: null,
+    seq: 0,
+  });
+  const refreshSidebar = React.useCallback(() => {
+    if (!user?.id) return;
+    const state = sidebarRefreshRef.current;
+    // Coalesce bursts (several deletions, a message plus its room appearing).
+    if (state.timer) clearTimeout(state.timer);
+    state.timer = setTimeout(async () => {
+      state.timer = null;
+      const seq = ++state.seq;
+      const res = await getSidebarData(user.id);
+      // Only the latest request may land; an older, slower one must not win.
+      if (seq !== state.seq || res.status !== "success" || !res.data) return;
+      setLiveRooms(res.data);
+    }, 250);
+  }, [user?.id]);
+  React.useEffect(() => {
+    const state = sidebarRefreshRef.current;
+    return () => {
+      if (state.timer) clearTimeout(state.timer);
+    };
+  }, []);
+
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isMobileFromHook = useIsMobile();
   const { setOpenMobile } = useSidebar();
-  const { unreadRooms, roomActivity, initializeUnread } = useUnread();
+  const { unreadRooms, roomActivity, roomTyping, initializeUnread } = useUnread();
   const { onlineUserIds } = usePresence();
   const customEmojis = useCustomEmojis();
 
@@ -172,8 +210,9 @@ export function AppSidebar({
         else if (command === "new-dm") setOpenDMDialog(true);
         else if (command === "create-channel") setOpenCreateChannel(true);
         else if (command === "explore-channels") setOpenExploreChannels(true);
+        else if (command === "refresh-sidebar") refreshSidebar();
       }),
-    [],
+    [refreshSidebar],
   );
 
   React.useEffect(() => {
@@ -574,7 +613,15 @@ export function AppSidebar({
                             chat.hasUnread ? "text-foreground/80" : "text-muted-foreground"
                           )}
                         >
-                          {chat.lastMessage ? renderLastMessage(chat.lastMessage) : "Belum ada pesan"}
+                          {roomTyping[chat.id] ? (
+                            <span className="text-primary" aria-live="polite">
+                              {chat.isChannel ? `${roomTyping[chat.id].name} sedang mengetik…` : "sedang mengetik…"}
+                            </span>
+                          ) : chat.lastMessage ? (
+                            renderLastMessage(chat.lastMessage)
+                          ) : (
+                            "Belum ada pesan"
+                          )}
                         </span>
 
                         {chat.hasUnread && (

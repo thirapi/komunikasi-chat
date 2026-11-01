@@ -1,5 +1,6 @@
 import { TypingUseCase } from "@/lib/application/use-cases/messages/typing.use-case";
 import { UserRepository } from "@/lib/infrastructure/repositories/user.repository";
+import { RoomRepository } from "@/lib/infrastructure/repositories/room.repository";
 import { PusherService } from "@/lib/infrastructure/services/pusher.service";
 import { z } from "zod";
 
@@ -7,7 +8,7 @@ import { db } from "@/lib/db";
 
 const pusherService = new PusherService();
 const userRepository = new UserRepository(db);
-const typingUseCase = new TypingUseCase(pusherService, userRepository);
+const typingUseCase = new TypingUseCase(pusherService, userRepository, new RoomRepository(db));
 
 const formSchema = z.object({
   userId: z.string(),

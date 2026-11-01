@@ -12,6 +12,7 @@ import { hapticLight } from "@/lib/native/haptics";
 import { stripMarkdown } from "@/lib/strip-markdown";
 import { navigateToRoom } from "@/lib/chat/room-navigation";
 import { messagePreview } from "@/lib/chat/message-preview";
+import { runAppCommand } from "@/lib/chat/app-commands";
 import { clientChatCache } from "@/lib/infrastructure/cache/client-cache";
 
 interface Props {
@@ -24,7 +25,7 @@ interface Props {
 export function RealtimeNotificationListener({ user }: Props) {
   const pathname = usePathname();
   const router = useRouter();
-  const { markAsUnread, markAsRead, recordActivity, unreadRooms } = useUnread();
+  const { markAsUnread, markAsRead, recordActivity, clearActivity, unreadRooms, setRoomTyping } = useUnread();
   // Rooms the sidebar already knows about; a message from any other room means
   // someone started a DM / added us to a channel, so the sidebar must reload.
   const knownRoomsRef = useRef(unreadRooms);
@@ -79,6 +80,9 @@ export function RealtimeNotificationListener({ user }: Props) {
         return;
       }
 
+      // Their message is here, so they are no longer "typing".
+      setRoomTyping(message.roomId, message.userId, null);
+
       // Put the message in the room's cached history right away, so opening
       // the room from the sidebar shows it on the first frame instead of the
       // stale cached tail (the server snapshot only lands a round trip later).
@@ -87,8 +91,10 @@ export function RealtimeNotificationListener({ user }: Props) {
       // Keep the sidebar preview, time and ordering live for every room.
       recordActivity(roomId, messagePreview(message, user), message.createdAt ?? new Date());
       if (!(roomId in knownRoomsRef.current) && !refreshedForRef.current.has(roomId)) {
+        // A room the chat list does not have yet (someone started a DM, we
+        // were added to a channel): fetch the list, not the whole page.
         refreshedForRef.current.add(roomId);
-        router.refresh();
+        runAppCommand("refresh-sidebar");
       }
 
       // The open room plays its own sound and handles read state
@@ -148,14 +154,25 @@ export function RealtimeNotificationListener({ user }: Props) {
       }
     });
 
+    // CHAT: typing, for the chat list (DMs and small groups only, see
+    // TypingUseCase). The open room shows its own indicator above the composer.
+    channel.bind(
+      "room-typing",
+      (data: { roomId: string; userId: string; username?: string; name?: string | null; typing: boolean }) => {
+        if (!data?.roomId || !data.userId || data.userId === user.id) return;
+        setRoomTyping(data.roomId, data.userId, data.typing ? data.name || data.username || "Seseorang" : null);
+      },
+    );
+
     // CHAT: Message Deleted
     channel.bind("message-deleted-notification", (data: { roomId?: string }) => {
-      // A refresh re-renders the whole server tree. A deletion in a room the
-      // user is not viewing cannot change what is on screen, so only refresh
-      // for the room currently open; otherwise rely on the unread badge.
-      if (data?.roomId && pathnameRef.current === `/channels/${data.roomId}`) {
-        router.refresh();
-      }
+      // The open room removes the message itself (chat-room.tsx). Here only
+      // the chat list may be stale: the preview may have been the deleted
+      // message, and the unread count may include it. Drop the live preview
+      // and re-fetch the list; the server has the new latest message.
+      if (!data?.roomId) return;
+      clearActivity(data.roomId);
+      runAppCommand("refresh-sidebar");
     });
     // CHAT: Mark as Read Sync
     channel.bind("room-marked-read", (data: { roomId: string }) => {
@@ -166,7 +183,7 @@ export function RealtimeNotificationListener({ user }: Props) {
       channel.unbind_all();
       getPusher().unsubscribe(userChannel(user.id));
     };
-  }, [user.id, user.username, markAsUnread, markAsRead, recordActivity, router]);
+  }, [user.id, user.username, markAsUnread, markAsRead, recordActivity, clearActivity, setRoomTyping, router]);
 
   return null;
 }

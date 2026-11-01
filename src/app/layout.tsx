@@ -75,6 +75,10 @@ export const viewport: Viewport = {
   themeColor: "#000000",
   maximumScale: 1,
   userScalable: false,
+  // Android Chrome: shrink the layout (not just the visual viewport) when the
+  // keyboard opens, so the composer stays above it. iOS ignores this; see
+  // ViewportHeightSync for that side.
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({

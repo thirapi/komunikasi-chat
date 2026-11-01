@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { stripMarkdown } from "@/lib/strip-markdown";
 import { retrySend, clearRetry } from "@/lib/chat/pending-sends";
 import { messagePreview } from "@/lib/chat/message-preview";
+import { runAppCommand } from "@/lib/chat/app-commands";
 
 /**
  * Ceiling on how many messages stay mounted at once. Pagination still works
@@ -74,7 +75,7 @@ export function ChatRoom({
   const { onlineUserIds } = usePresence();
   const [missedCount, setMissedCount] = useState(0);
   const [canShowJump, setCanShowJump] = useState(false);
-  const { markAsRead: markSidebarAsRead, recordActivity } = useUnread();
+  const { markAsRead: markSidebarAsRead, recordActivity, clearActivity } = useUnread();
   const [showMembers, setShowMembers] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<MessageWithUserDTO | null>(null);
@@ -919,6 +920,14 @@ export function ChatRoom({
       }));
     });
     chatChannel.bind("message-deleted", ({ messageId }: { messageId: string }) => {
+      // The newest message going away changes this room's chat-list preview.
+      // The deleter gets no user-channel notification for their own delete,
+      // so refresh the list from here too (bursts are coalesced).
+      const list = messagesRef.current;
+      if (list.length > 0 && list[list.length - 1].id === messageId) {
+        clearActivity(roomData.id);
+        runAppCommand("refresh-sidebar");
+      }
       setMessages((prev) => {
         const deletedIndex = prev.findIndex((m) => m.id === messageId);
         if (deletedIndex === -1) return prev;
@@ -969,7 +978,7 @@ export function ChatRoom({
       window.removeEventListener("online", handleFocus);
       document.removeEventListener("visibilitychange", handleVisible);
     };
-  }, [roomData.id, handleNewMessage, syncMessages, userId]);
+  }, [roomData.id, handleNewMessage, syncMessages, userId, clearActivity]);
 
   const handleMessageSend = useCallback(
     (msg: MessageWithUserDTO) => {

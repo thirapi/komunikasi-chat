@@ -1,6 +1,7 @@
 "use server";
 
 import { AppSidebar } from "@/app/(with-sidebar)/app-sidebar";
+import { ViewportHeightSync } from "@/components/viewport-height-sync";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import {
   getUserSession,
@@ -55,7 +56,8 @@ export default async function layout({
   } : null;
 
   return (
-    <div className="flex flex-col h-[100dvh] overflow-hidden">
+    <div className="flex flex-col h-[var(--app-height,100dvh)] overflow-hidden">
+      <ViewportHeightSync />
       <SidebarProvider>
         <EmojiProvider>
         {user ? (
