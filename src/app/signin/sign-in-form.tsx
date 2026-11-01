@@ -1,6 +1,5 @@
 "use client";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
@@ -16,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { useState } from "react";
 import { signInUser } from "@/app/auth.action";
 import { useSearchParams } from "next/navigation";
-import { Eye, EyeSlash, CircleNotch } from "@phosphor-icons/react/dist/ssr";
+import { AuthError, AuthHeading, AuthSubmit, PasswordField, authInputClass } from "@/components/landingpage/auth-form-parts";
 
 const formSchema = z.object({
   username: z.string().min(3, "Username minimal 3 karakter"),
@@ -29,7 +28,6 @@ export function SignInForm({
 }: React.ComponentPropsWithoutRef<"div">) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: { username: "", password: "" },
@@ -56,12 +54,11 @@ export function SignInForm({
 
   return (
     <div className={cn("flex flex-col gap-8", className)} {...props}>
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Masuk</h1>
-        <p className="text-sm text-muted-foreground">
-          Gunakan username dan password akunmu untuk melanjutkan.
-        </p>
-      </div>
+      <AuthHeading
+        eyebrow="Masuk"
+        title="Selamat datang kembali"
+        description="Masuk dengan username dan password akunmu."
+      />
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="flex flex-col gap-5">
@@ -69,10 +66,18 @@ export function SignInForm({
             control={form.control}
             name="username"
             render={({ field }) => (
-              <FormItem>
+              <FormItem className="auth-rise" style={{ ["--i" as string]: 3 }}>
                 <FormLabel>Username</FormLabel>
                 <FormControl>
-                  <Input autoComplete="username" autoCapitalize="none" spellCheck={false} {...field} />
+                  <Input
+                    autoComplete="username"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    placeholder="namakamu"
+                    className={authInputClass}
+                    autoFocus
+                    {...field}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -83,54 +88,26 @@ export function SignInForm({
             control={form.control}
             name="password"
             render={({ field }) => (
-              <FormItem>
+              <FormItem className="auth-rise" style={{ ["--i" as string]: 4 }}>
                 <FormLabel>Password</FormLabel>
-                {/* FormControl wraps the <input> itself, not the wrapper div:
-                    it forwards the id the <label> points at, and on a div the
-                    label was not associated with the field at all. */}
-                <div className="relative">
-                  <FormControl>
-                    <Input
-                      type={showPassword ? "text" : "password"}
-                      autoComplete="current-password"
-                      className="pr-10"
-                      {...field}
-                    />
-                  </FormControl>
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((v) => !v)}
-                      aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
-                      aria-pressed={showPassword}
-                      className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-md text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-                    >
-                      {showPassword ? (
-                        <EyeSlash aria-hidden className="size-4" />
-                      ) : (
-                        <Eye aria-hidden className="size-4" />
-                      )}
-                    </button>
-                </div>
+                <PasswordField autoComplete="current-password" {...field} />
                 <FormMessage />
               </FormItem>
             )}
           />
 
-          <p role="alert" aria-live="polite" className={cn("text-sm text-destructive", !error && "sr-only")}>
-            {error}
-          </p>
+          <AuthError message={error} />
 
-          <Button type="submit" className="w-full" disabled={pending}>
-            {pending && <CircleNotch aria-hidden className="size-4 animate-spin" />}
-            {pending ? "Memproses…" : "Masuk"}
-          </Button>
+          <div className="auth-rise pt-1" style={{ ["--i" as string]: 5 }}>
+            <AuthSubmit pending={pending} label="Masuk" pendingLabel="Memproses…" />
+          </div>
         </form>
       </Form>
 
-      <p className="text-sm text-muted-foreground">
+      <p className="auth-rise text-sm text-muted-foreground lg:hidden" style={{ ["--i" as string]: 6 }}>
         Belum punya akun?{" "}
-        <a href={signUpHref} className="text-foreground underline underline-offset-4 hover:text-primary">
-          Daftar
+        <a href={signUpHref} className="font-medium text-foreground underline-offset-4 hover:underline">
+          Daftar sekarang
         </a>
       </p>
     </div>

@@ -516,7 +516,7 @@ export function AppSidebar({
                       // render); modified clicks keep open-in-new-tab etc.
                       if (isPlainLeftClick(e)) {
                         e.preventDefault();
-                        navigateToRoom(chat.url);
+                        navigateToRoom(chat.url, router);
                       }
                     }}
                     onMouseEnter={() => prefetchRoom(chat.id)}
@@ -634,7 +634,7 @@ export function AppSidebar({
         onOpenChange={setOpenGlobalSearch}
         onSelectMessage={(messageId, roomId) => {
           if (roomId) {
-            navigateToRoom(`/channels/${roomId}?messageId=${encodeURIComponent(messageId)}`);
+            navigateToRoom(`/channels/${roomId}?messageId=${encodeURIComponent(messageId)}`, router);
           }
         }}
       />

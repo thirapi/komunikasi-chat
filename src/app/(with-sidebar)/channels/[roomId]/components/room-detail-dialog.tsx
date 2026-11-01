@@ -33,7 +33,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { RoomWithParticipantsDTO } from "@/lib/entities/models/room.model";
 import { updateChannel, deleteChannel, removeParticipant } from "../room.action";
-import { uploadFileAction } from "../messages.action";
+import { uploadFileResult } from "@/lib/chat/upload";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { UserAvatar } from "@/components/ui/user-avatar";
@@ -158,9 +158,7 @@ export function RoomDetailDialog({
 
     setIsBannerUploading(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const response = await uploadFileAction(formData, "room-banners");
+      const response = await uploadFileResult(file, "room-banners");
 
       if (response.status === "success" && response.data) {
         setBanner(response.data.fileurl);
@@ -184,9 +182,7 @@ export function RoomDetailDialog({
       let avatarUrl = roomData.avatar;
 
       if (avatarFile) {
-        const formData = new FormData();
-        formData.append("file", avatarFile);
-        const uploadRes = await uploadFileAction(formData, "room-avatars");
+        const uploadRes = await uploadFileResult(avatarFile, "room-avatars");
         if (uploadRes.status === "success" && uploadRes.data) {
           avatarUrl = uploadRes.data.fileurl;
         } else {

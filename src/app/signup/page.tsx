@@ -7,7 +7,7 @@ export default async function SignUpPage() {
   if (await getUserSession()) redirect("/channels/default");
 
   return (
-    <AuthShell switchTo={{ href: "/", label: "Masuk" }}>
+    <AuthShell switchTo={{ href: "/", label: "Masuk", hint: "Sudah punya akun?" }}>
       <SignUpForm />
     </AuthShell>
   );

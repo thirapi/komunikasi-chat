@@ -43,7 +43,7 @@ export default async function House() {
           }),
         }}
       />
-      <AuthShell switchTo={{ href: "/signup", label: "Daftar" }}>
+      <AuthShell switchTo={{ href: "/signup", label: "Daftar", hint: "Belum punya akun?" }}>
         <SignInForm />
       </AuthShell>
     </>

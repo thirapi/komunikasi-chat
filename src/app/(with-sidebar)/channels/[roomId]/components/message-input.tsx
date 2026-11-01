@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useIsImpersonating } from "@/hooks/use-impersonation";
-import { createMessage, uploadFileAction } from "../messages.action";
+import { createMessage } from "../messages.action";
 import { createId } from "@paralleldrive/cuid2";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -13,10 +13,20 @@ import { setTypingStatusAction } from "../messages.action";
 import { useTypingIndicator } from "@/hooks/use-typing-indicator";
 import { RoomRecord, RoomWithParticipantsDTO } from "@/lib/entities/models/room.model";
 import { MessageWithUserDTO } from "@/lib/entities/models/message.model";
-import { ArrowBendUpLeft, X, Paperclip, File, Plus, PaperPlaneRight } from "@phosphor-icons/react/dist/ssr";
+import { ArrowBendUpLeft, X, Paperclip, File, Plus, PaperPlaneRight, ImageSquare, FileText } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 import { MentionTextarea } from "@/components/ui/mention-textarea";
 import { registerRetry, clearRetry } from "@/lib/chat/pending-sends";
+import { uploadFile } from "@/lib/chat/upload";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+const MEDIA_ACCEPT = "image/*,video/*";
+const DOCUMENT_ACCEPT = ".pdf,.doc,.docx,.txt";
 import dynamic from "next/dynamic";
 
 // The picker carries the whole `frimousse` emoji dataset and is only reachable
@@ -39,6 +49,10 @@ interface Props {
   onStartEditLast: () => void;
   /** Called when a send fails; the row should offer "Coba lagi". */
   onSendFailed: (optimisticId: string) => void;
+  /** Upload progress (0–100) for an optimistic message with attachments. */
+  onUploadProgress?: (optimisticId: string, pct: number) => void;
+  /** Filled with this composer's addFiles, so the room can forward dropped files. */
+  fileDropRef?: React.MutableRefObject<((files: File[]) => void) | null>;
   user: {
     id: string;
     name: string;
@@ -56,12 +70,15 @@ export function MessageInput({
   onNewMessage,
   onStartEditLast,
   onSendFailed,
+  onUploadProgress,
+  fileDropRef,
   user,
 }: Props) {
   const [content, setContent] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [filePreviews, setFilePreviews] = useState<{ file: File; preview: string | null }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
   const { isImpersonating, impersonatedUser } = useIsImpersonating();
 
   const { displayNames } = useTypingIndicator(roomData.id, userId);
@@ -106,37 +123,55 @@ export function MessageInput({
     });
   };
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
+  const selectedCountRef = useRef(0);
+  selectedCountRef.current = selectedFiles.length;
 
-    if (selectedFiles.length + files.length > MAX_FILES) {
+  /**
+   * Single entry point for attachments from the picker, clipboard paste and
+   * drag-and-drop, so the limits and messages are the same everywhere.
+   */
+  const addFiles = useCallback(async (files: File[]) => {
+    if (files.length === 0) return;
+    const room = MAX_FILES - selectedCountRef.current;
+    if (room <= 0) {
       toast.error(`Maksimal ${MAX_FILES} file per pesan`);
       return;
     }
+    if (files.length > room) {
+      toast.error(`Maksimal ${MAX_FILES} file per pesan — ${files.length - room} file tidak ditambahkan`);
+    }
 
     const validFiles: File[] = [];
-    for (const file of files) {
+    for (const file of files.slice(0, room)) {
       if (file.size > MAX_FILE_SIZE) {
-        toast.error(`File "${file.name}" terlalu besar. Maksimal 50 MB`);
+        toast.error(`"${file.name}" terlalu besar. Maksimal 50 MB`);
         continue;
       }
       validFiles.push(file);
     }
-
     if (validFiles.length === 0) return;
 
     const newPreviews = await Promise.all(
-      validFiles.map(async (file) => ({
-        file,
-        preview: await generatePreview(file),
-      }))
+      validFiles.map(async (file) => ({ file, preview: await generatePreview(file) })),
     );
-
     setSelectedFiles((prev) => [...prev, ...validFiles]);
     setFilePreviews((prev) => [...prev, ...newPreviews]);
+    inputRef.current?.focus();
+  }, []);
 
-    if (fileInputRef.current) fileInputRef.current.value = "";
+  // ChatRoom forwards files dropped anywhere on the conversation here.
+  useEffect(() => {
+    if (!fileDropRef) return;
+    fileDropRef.current = (files) => void addFiles(files);
+    return () => {
+      fileDropRef.current = null;
+    };
+  }, [fileDropRef, addFiles]);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    void addFiles(files);
   };
 
   const removeFile = (index: number) => {
@@ -147,7 +182,6 @@ export function MessageInput({
   const clearAllFiles = () => {
     setSelectedFiles([]);
     setFilePreviews([]);
-    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
 
@@ -169,21 +203,21 @@ export function MessageInput({
     async (job: SendJob) => {
       try {
         if (job.files.length > 0 && !job.attachments) {
+          // Direct-to-R2 uploads; overall progress is weighted by file size.
+          const total = job.files.reduce((n, f) => n + f.size, 0) || 1;
+          const loaded = job.files.map(() => 0);
+          const report = () =>
+            onUploadProgress?.(
+              job.optimisticId,
+              Math.round(job.files.reduce((n, f, i) => n + (loaded[i] / 100) * f.size, 0) / total * 100),
+            );
           job.attachments = await Promise.all(
-            job.files.map(async (file) => {
-              const formData = new FormData();
-              formData.append("file", file);
-              const res = await uploadFileAction(formData, `channels/${roomData.id}`);
-              if (res.status === "success" && res.data) {
-                return {
-                  url: res.data.fileurl,
-                  key: res.data.filename,
-                  fileType: res.data.mimetype,
-                  size: res.data.size,
-                };
-              }
-              throw new Error(res.error?.message || `Gagal mengunggah ${file.name}`);
-            }),
+            job.files.map((file, i) =>
+              uploadFile(file, `channels/${roomData.id}`, (pct) => {
+                loaded[i] = pct;
+                report();
+              }),
+            ),
           );
         }
 
@@ -210,7 +244,7 @@ export function MessageInput({
         onSendFailed(job.optimisticId);
       }
     },
-    [userId, roomData.id, onNewMessage, onSendFailed],
+    [userId, roomData.id, onNewMessage, onSendFailed, onUploadProgress],
   );
 
   const handleSend = useCallback(
@@ -336,47 +370,18 @@ export function MessageInput({
     };
   }, [sendTypingEvent, sendStopTypingEvent]);
 
-  // Support paste image
+  // Support pasting images (e.g. screenshots) straight into the composer.
   useEffect(() => {
-    const handlePaste = async (e: ClipboardEvent) => {
-      const items = Array.from(e.clipboardData?.items || []);
-      const imageItems = items.filter(item => item.type.startsWith("image/"));
-
-      if (imageItems.length === 0) return;
-
-      if (selectedFiles.length + imageItems.length > MAX_FILES) {
-        toast.error(`Maksimal ${MAX_FILES} file per pesan`);
-        return;
-      }
-
-      const newFiles: File[] = [];
-      for (const item of imageItems) {
-        const file = item.getAsFile();
-        if (file) {
-          if (file.size > MAX_FILE_SIZE) {
-            toast.error(`Gambar "${file.name}" terlalu besar. Maksimal 50 MB`);
-            continue;
-          }
-          newFiles.push(file);
-        }
-      }
-
-      if (newFiles.length > 0) {
-        const newPreviews = await Promise.all(
-          newFiles.map(async (file) => ({
-            file,
-            preview: await generatePreview(file),
-          }))
-        );
-
-        setSelectedFiles((prev) => [...prev, ...newFiles]);
-        setFilePreviews((prev) => [...prev, ...newPreviews]);
-      }
+    const handlePaste = (e: ClipboardEvent) => {
+      const images = Array.from(e.clipboardData?.items || [])
+        .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+        .map((item) => item.getAsFile())
+        .filter((f): f is File => !!f);
+      if (images.length > 0) void addFiles(images);
     };
-
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
-  }, [selectedFiles.length]);
+  }, [addFiles]);
 
   const replyExcerpt = replyingTo?.content
     ? replyingTo.content
@@ -470,7 +475,7 @@ export function MessageInput({
               {selectedFiles.length < MAX_FILES && (
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => mediaInputRef.current?.click()}
                   className="h-20 w-20 shrink-0 rounded-md border border-dashed border-border flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
                 >
                   <Plus className="h-4 w-4" />
@@ -481,26 +486,42 @@ export function MessageInput({
           )}
 
           <div className={cn("flex items-end gap-0.5 px-1.5 py-0.5", hasTray && "pt-1")}>
-            <input
-              type="file"
-              multiple
-              ref={fileInputRef}
-              onChange={handleFileSelect}
-              className="hidden"
-              accept="image/*,video/*,.pdf,.doc,.docx,.txt"
-            />
+            <input type="file" multiple ref={mediaInputRef} onChange={handleFileSelect} className="hidden" accept={MEDIA_ACCEPT} />
+            <input type="file" multiple ref={fileInputRef} onChange={handleFileSelect} className="hidden" accept={DOCUMENT_ACCEPT} />
 
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={() => fileInputRef.current?.click()}
-              className="h-8 w-8 mb-1 shrink-0 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
-              aria-label="Lampirkan file"
-              title="Lampirkan file"
-            >
-              <Paperclip className="h-[18px] w-[18px]" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 mb-1 shrink-0 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted data-[state=open]:bg-muted data-[state=open]:text-foreground"
+                  aria-label="Lampirkan"
+                  title="Lampirkan"
+                >
+                  <Paperclip className="h-[18px] w-[18px]" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="top" align="start" sideOffset={8} className="w-56 p-1">
+                <DropdownMenuItem onSelect={() => mediaInputRef.current?.click()} className="gap-3 py-2">
+                  <ImageSquare className="h-[18px] w-[18px] text-muted-foreground" />
+                  <span className="flex flex-col">
+                    <span className="text-sm">Foto & video</span>
+                    <span className="text-[11px] text-muted-foreground">Dari galeri atau kamera</span>
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => fileInputRef.current?.click()} className="gap-3 py-2">
+                  <FileText className="h-[18px] w-[18px] text-muted-foreground" />
+                  <span className="flex flex-col">
+                    <span className="text-sm">Dokumen</span>
+                    <span className="text-[11px] text-muted-foreground">PDF, Word, teks</span>
+                  </span>
+                </DropdownMenuItem>
+                <div className="mt-1 border-t border-border px-2 pt-1.5 pb-1 text-[11px] text-muted-foreground">
+                  Bisa juga seret file ke chat atau tempel gambar
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <MentionTextarea
               value={content}

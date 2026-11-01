@@ -1,9 +1,9 @@
 "use client";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { useState } from "react";
 import { signUpUser } from "@/app/auth.action";
 import { useSearchParams } from "next/navigation";
-import { Eye, EyeSlash, CircleNotch } from "@phosphor-icons/react/dist/ssr";
+import { AuthError, AuthHeading, AuthSubmit, PasswordField, PasswordStrength, authInputClass } from "@/components/landingpage/auth-form-parts";
 
 const formSchema = z
   .object({
@@ -31,30 +31,6 @@ const formSchema = z
     path: ["confirm_password"],
     message: "Password tidak sama",
   });
-
-function PasswordInput({
-  autoComplete,
-  ...props
-}: React.ComponentProps<typeof Input> & { autoComplete: string }) {
-  const [visible, setVisible] = useState(false);
-  return (
-    <div className="relative">
-      {/* FormControl on the <input>, so the <label> is associated with it. */}
-      <FormControl>
-        <Input type={visible ? "text" : "password"} autoComplete={autoComplete} className="pr-10" {...props} />
-      </FormControl>
-      <button
-        type="button"
-        onClick={() => setVisible((v) => !v)}
-        aria-label={visible ? "Sembunyikan password" : "Tampilkan password"}
-        aria-pressed={visible}
-        className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-md text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-      >
-        {visible ? <EyeSlash aria-hidden className="size-4" /> : <Eye aria-hidden className="size-4" />}
-      </button>
-    </div>
-  );
-}
 
 export function SignUpForm({
   className,
@@ -88,14 +64,15 @@ export function SignUpForm({
     }
   };
 
+  const password = form.watch("password");
+
   return (
     <div className={cn("flex flex-col gap-8", className)} {...props}>
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Daftar</h1>
-        <p className="text-sm text-muted-foreground">
-          Buat akun, lalu kamu langsung masuk ke Komunikasi.
-        </p>
-      </div>
+      <AuthHeading
+        eyebrow="Daftar"
+        title="Buat akun baru"
+        description="Cukup username dan password — setelah itu kamu langsung masuk."
+      />
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="flex flex-col gap-5">
@@ -103,11 +80,20 @@ export function SignUpForm({
             control={form.control}
             name="username"
             render={({ field }) => (
-              <FormItem>
+              <FormItem className="auth-rise" style={{ ["--i" as string]: 3 }}>
                 <FormLabel>Username</FormLabel>
                 <FormControl>
-                  <Input autoComplete="username" autoCapitalize="none" spellCheck={false} {...field} />
+                  <Input
+                    autoComplete="username"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    placeholder="namakamu"
+                    className={authInputClass}
+                    autoFocus
+                    {...field}
+                  />
                 </FormControl>
+                <FormDescription className="text-xs">Huruf kecil, angka, dan garis bawah.</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -117,9 +103,10 @@ export function SignUpForm({
             control={form.control}
             name="password"
             render={({ field }) => (
-              <FormItem>
+              <FormItem className="auth-rise" style={{ ["--i" as string]: 4 }}>
                 <FormLabel>Password</FormLabel>
-                <PasswordInput autoComplete="new-password" {...field} />
+                <PasswordField autoComplete="new-password" placeholder="Minimal 4 karakter" {...field} />
+                <PasswordStrength value={password} />
                 <FormMessage />
               </FormItem>
             )}
@@ -129,28 +116,25 @@ export function SignUpForm({
             control={form.control}
             name="confirm_password"
             render={({ field }) => (
-              <FormItem>
+              <FormItem className="auth-rise" style={{ ["--i" as string]: 5 }}>
                 <FormLabel>Ulangi password</FormLabel>
-                <PasswordInput autoComplete="new-password" {...field} />
+                <PasswordField autoComplete="new-password" placeholder="Ketik ulang password" {...field} />
                 <FormMessage />
               </FormItem>
             )}
           />
 
-          <p role="alert" aria-live="polite" className={cn("text-sm text-destructive", !error && "sr-only")}>
-            {error}
-          </p>
+          <AuthError message={error} />
 
-          <Button type="submit" className="w-full" disabled={pending}>
-            {pending && <CircleNotch aria-hidden className="size-4 animate-spin" />}
-            {pending ? "Membuat akun…" : "Daftar"}
-          </Button>
+          <div className="auth-rise pt-1" style={{ ["--i" as string]: 6 }}>
+            <AuthSubmit pending={pending} label="Buat akun" pendingLabel="Membuat akun…" />
+          </div>
         </form>
       </Form>
 
-      <p className="text-sm text-muted-foreground">
+      <p className="auth-rise text-sm text-muted-foreground lg:hidden" style={{ ["--i" as string]: 7 }}>
         Sudah punya akun?{" "}
-        <a href={signInHref} className="text-foreground underline underline-offset-4 hover:text-primary">
+        <a href={signInHref} className="font-medium text-foreground underline-offset-4 hover:underline">
           Masuk
         </a>
       </p>

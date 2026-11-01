@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { roomIdFromPath } from "@/lib/chat/room-navigation";
+import { roomIdFromPath, setRoomHostMounted } from "@/lib/chat/room-navigation";
 import { ChatRoomClientWrapper } from "./[roomId]/components/chat-room-client-wrapper";
 import { ChatEmptyState } from "../chat-empty-state";
 import { useCurrentUser } from "@/components/current-user-provider";
@@ -19,6 +20,12 @@ export function RoomHost({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const roomId = roomIdFromPath(pathname);
   const user = useCurrentUser();
+
+  // Lets navigateToRoom know client-side switching is available.
+  useEffect(() => {
+    setRoomHostMounted(true);
+    return () => setRoomHostMounted(false);
+  }, []);
 
   if (!roomId) {
     return (

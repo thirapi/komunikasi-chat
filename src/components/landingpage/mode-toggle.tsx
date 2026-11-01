@@ -1,16 +1,21 @@
 "use client"
 import { Moon, Sun } from "@phosphor-icons/react/dist/ssr"
 import { useTheme } from "next-themes"
+import { useEffect, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 
 export function ModeToggle() {
   const { setTheme, resolvedTheme } = useTheme()
+  // resolvedTheme is unknown on the server, so the label is only derived from
+  // it after mount; otherwise server and client disagree (hydration mismatch).
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
 
   // resolvedTheme is the theme actually applied, so "system" toggles to the
   // opposite of what the user is looking at rather than to "dark" every time.
   const isDark = resolvedTheme === "dark"
-  const label = isDark ? "Beralih ke mode terang" : "Beralih ke mode gelap"
+  const label = !mounted ? "Ganti tema" : isDark ? "Beralih ke mode terang" : "Beralih ke mode gelap"
 
   return (
     <Button
@@ -27,12 +32,10 @@ export function ModeToggle() {
         on the client and log a hydration mismatch.
       */}
       <Sun
-        weight="duotone"
         aria-hidden
         className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-transform duration-300 dark:-rotate-90 dark:scale-0"
       />
       <Moon
-        weight="duotone"
         aria-hidden
         className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-transform duration-300 dark:rotate-0 dark:scale-100"
       />

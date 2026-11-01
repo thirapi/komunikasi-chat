@@ -106,7 +106,7 @@ export function RealtimeNotificationListener({ user }: Props) {
           className="flex w-[356px] max-w-[calc(100vw-2rem)] items-start gap-3 rounded-lg border border-border bg-popover p-3 text-left shadow-lg hover:bg-muted/60 transition-colors"
           onClick={() => {
             toast.dismiss(t);
-            navigateToRoom(roomUrl);
+            navigateToRoom(roomUrl, router);
           }}
         >
           <UserAvatar src={avatar} alt={sender} className="h-9 w-9 rounded-full" />
@@ -137,7 +137,7 @@ export function RealtimeNotificationListener({ user }: Props) {
           tag: `chat-${roomId}`,
         }).onclick = () => {
           window.focus();
-          navigateToRoom(roomUrl);
+          navigateToRoom(roomUrl, router);
         };
       }
     });
