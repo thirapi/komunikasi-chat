@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { MagnifyingGlass, CircleNotch, ChatTeardropText } from "@phosphor-icons/react/dist/ssr";
+import { MagnifyingGlass, CircleNotch } from "@phosphor-icons/react/dist/ssr";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import {
   Dialog,
@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { getPublicRooms, joinRoom } from "./channels/[roomId]/room.action";
 import { RoomWithParticipantsDTO } from "@/lib/entities/models/room.model";
 import { toast } from "sonner";
@@ -65,7 +64,7 @@ export function ExploreChannelsDialog({
     try {
       const response = await joinRoom(channelId, userId);
       if (response.status === "success") {
-        toast.success("Berhasil bergabung ke channel!");
+        toast.success("Kamu bergabung ke channel");
         onOpenChange(false);
         router.push(`/channels/${channelId}`);
         router.refresh();
@@ -81,91 +80,70 @@ export function ExploreChannelsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg overflow-hidden flex flex-col max-h-[85vh] rounded-2xl border-border/40 p-0 gap-0">
-        <DialogHeader className="p-6 pb-2">
-          <DialogTitle className="text-xl font-semibold tracking-tight">
-            jelajahi channel
-          </DialogTitle>
-          <DialogDescription className="text-sm">
-            temukan channel publik yang sesuai dengan minatmu.
-          </DialogDescription>
+      <DialogContent className="sm:max-w-lg overflow-hidden flex flex-col max-h-[80vh] p-0 gap-0">
+        <DialogHeader className="px-5 pt-5 pb-3">
+          <DialogTitle>Jelajahi channel</DialogTitle>
+          <DialogDescription>Channel publik yang bisa kamu ikuti.</DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 py-2">
+        <div className="px-5 pb-3">
           <div className="relative">
-            <MagnifyingGlass weight="duotone" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <MagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="cari berdasarkan nama atau deskripsi..."
+              placeholder="Cari nama atau deskripsi"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-10 rounded-xl bg-muted/30 border-border/50 focus-visible:ring-primary/20"
+              className="pl-9"
+              autoFocus
             />
           </div>
         </div>
 
-        <ScrollArea className="flex-1 mt-2 px-6">
-          <div className="space-y-2 pb-6">
-            {isLoading ? (
-              <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
-                <CircleNotch weight="duotone" className="h-8 w-8 animate-spin text-primary/60" />
-                <p className="text-sm font-medium">mencari channel publik...</p>
-              </div>
-            ) : filteredChannels.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center border-2 border-dashed border-muted/50 rounded-2xl gap-4">
-                <ChatTeardropText weight="duotone" className="h-10 w-10 text-muted-foreground/30" />
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold text-muted-foreground">
-                    {searchQuery ? "tidak ada channel yang cocok" : "belum ada channel publik tersedia"}
-                  </p>
-                  <p className="text-xs text-muted-foreground/60 px-4">
-                    coba kata kunci lain atau periksa kembali nanti.
-                  </p>
-                </div>
-              </div>
-            ) : (
-              filteredChannels.map((channel) => (
-                <div
-                  key={channel.id}
-                  className="group flex items-center gap-4 p-4 rounded-2xl border border-border/40 bg-card/50 hover:bg-accent/40 transition-all duration-200"
-                >
-                  <UserAvatar 
-                    src={channel.avatar} 
+        <div className="flex-1 min-h-[220px] overflow-y-auto border-t border-border">
+          {isLoading ? (
+            <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+              <CircleNotch className="h-4 w-4 animate-spin" />
+              Memuat channel…
+            </div>
+          ) : filteredChannels.length === 0 ? (
+            <div className="px-5 py-14 text-center">
+              <p className="text-sm text-foreground">
+                {searchQuery ? "Tidak ada channel yang cocok" : "Belum ada channel publik"}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {searchQuery ? "Coba kata kunci lain." : "Kamu bisa membuat channel sendiri."}
+              </p>
+            </div>
+          ) : (
+            <ul className="divide-y divide-border">
+              {filteredChannels.map((channel) => (
+                <li key={channel.id} className="flex items-center gap-3 px-5 py-3">
+                  <UserAvatar
+                    src={channel.avatar}
                     alt={channel.name}
-                    className="h-12 w-12 rounded-xl shrink-0 border border-border/50"
+                    className="h-10 w-10 rounded-lg shrink-0"
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                       <h3 className="font-bold text-sm text-foreground truncate">#{channel.name}</h3>
-                      <span className="text-[10px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full font-semibold">
-                         publik
-                      </span>
-                    </div>
-                    {channel.description && (
-                      <p className="text-xs text-muted-foreground line-clamp-1 leading-relaxed mb-1">
-                        {channel.description}
-                      </p>
-                    )}
-                    <div className="flex items-center gap-3 text-[10px] text-muted-foreground/70 font-medium">
-                      <span>{channel.participants.length} anggota</span>
-                    </div>
+                    <p className="text-sm font-medium text-foreground truncate">#{channel.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {channel.participants.length} anggota
+                      {channel.description && <> · {channel.description}</>}
+                    </p>
                   </div>
-                  <Button 
-                    size="sm" 
-                    className="shrink-0 font-semibold rounded-xl shadow-none px-4"
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 h-8"
                     onClick={() => handleJoin(channel.id)}
                     disabled={isJoining !== null}
                   >
-                    {isJoining === channel.id ? (
-                      <CircleNotch weight="duotone" className="w-4 h-4 animate-spin" />
-                    ) : (
-                      "bergabung"
-                    )}
+                    {isJoining === channel.id ? <CircleNotch className="w-4 h-4 animate-spin" /> : "Gabung"}
                   </Button>
-                </div>
-              ))
-            )}
-          </div>
-        </ScrollArea>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

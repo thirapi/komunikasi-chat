@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Bell, Check, PencilSimple, Lock, Shield, User, UserCircle, X, CircleNotch, Camera, Key, Sparkle, CaretLeft, Trash, Info, WarningCircle } from "@phosphor-icons/react/dist/ssr";
+import { Shield, User, UserCircle, CircleNotch, Camera, CaretLeft, CaretRight, Info } from "@phosphor-icons/react/dist/ssr";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -11,16 +11,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import {
   Sidebar,
   SidebarContent,
@@ -36,6 +26,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { ImageLightbox } from "@/components/ui/image-lightbox";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
@@ -72,13 +63,14 @@ function Paintbrush(props: any) {
   )
 }
 
+// Flat tones drawn from the app palette (see globals.css chart colours).
 const presetBanners = [
-  "linear-gradient(to right, #4f46e5, #7c3aed)",
-  "linear-gradient(to right, #06b6d4, #3b82f6)",
-  "linear-gradient(to right, #10b981, #3b82f6)",
-  "linear-gradient(to right, #f59e0b, #ef4444)",
-  "#1e293b",
-  "#475569",
+  "#6B8E7B",
+  "#5C738B",
+  "#C27A65",
+  "#D8C3A5",
+  "#8E8D8A",
+  "#2C2C2E",
 ];
 
 export function UserSettingsDialog({
@@ -122,7 +114,7 @@ export function UserSettingsDialog({
   const bannerInputRef = React.useRef<HTMLInputElement>(null);
 
   const handleUpdateProfile = async () => {
-    if (!username.trim()) return toast.error("Handle tidak boleh kosong");
+    if (!username.trim()) return toast.error("Nama pengguna tidak boleh kosong");
     setIsUpdating(true);
     try {
       const response = await updateUserAction(user.id, {
@@ -136,7 +128,7 @@ export function UserSettingsDialog({
       });
 
       if (response.status === "success") {
-        toast.success("Profil berhasil diperbarui!");
+        toast.success("Profil diperbarui");
       } else {
         toast.error(`Gagal memperbarui profil: ${response.error?.message}`);
       }
@@ -146,8 +138,8 @@ export function UserSettingsDialog({
   };
 
   const handleChangePassword = async () => {
-    if (!newPassword) return toast.error("Password baru tidak boleh kosong");
-    if (newPassword !== confirmPassword) return toast.error("Konfirmasi password tidak cocok");
+    if (!newPassword) return toast.error("Kata sandi baru tidak boleh kosong");
+    if (newPassword !== confirmPassword) return toast.error("Konfirmasi kata sandi tidak cocok");
 
     setIsUpdating(true);
     try {
@@ -157,12 +149,12 @@ export function UserSettingsDialog({
       });
 
       if (response.status === "success") {
-        toast.success("Password berhasil diubah!");
+        toast.success("Kata sandi diperbarui");
         setOldPassword("");
         setNewPassword("");
         setConfirmPassword("");
       } else {
-        toast.error(response.error?.message || "Gagal mengubah password");
+        toast.error(response.error?.message || "Gagal mengubah kata sandi");
       }
     } finally {
       setIsUpdating(false);
@@ -186,7 +178,7 @@ export function UserSettingsDialog({
 
       if (response.status === "success" && response.data) {
         setAvatar(response.data.fileurl);
-        toast.success("Foto profil berhasil diunggah!");
+        toast.success("Foto profil diunggah");
       } else {
         toast.error(response.error?.message || "Gagal mengunggah foto");
       }
@@ -212,7 +204,7 @@ export function UserSettingsDialog({
 
       if (response.status === "success" && response.data) {
         setBanner(response.data.fileurl);
-        toast.success("Banner berhasil diunggah!");
+        toast.success("Banner diunggah");
       } else {
         toast.error(response.error?.message || "Gagal mengunggah banner");
       }
@@ -246,18 +238,16 @@ export function UserSettingsDialog({
         {trigger || (
           <button className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-muted/50 rounded-md transition-colors">
             <UserCircle className="h-4 w-4 text-muted-foreground" />
-            Edit Profile
+            Edit profil
           </button>
         )}
       </DialogTrigger>
-      <DialogContent className="overflow-hidden p-0 h-[100dvh] w-full md:h-full md:max-h-[800px] md:max-w-[900px] lg:max-w-[1050px] gap-0 border-0 shadow-2xl">
+      <DialogContent className="overflow-hidden p-0 gap-0 h-[100dvh] w-full md:h-full md:max-h-[800px] md:max-w-[900px] lg:max-w-[1050px]">
         <SidebarProvider className="items-start min-h-0 h-full">
-          <Sidebar collapsible="none" className={cn("hidden md:flex w-52 border-r bg-muted/20", selectedItem && "hidden md:flex")}>
+          <Sidebar collapsible="none" className={cn("hidden md:flex w-52 border-r border-border bg-muted/40", selectedItem && "hidden md:flex")}>
             <SidebarContent className="p-2">
-              <div className="px-3 py-4">
-                <h2 className="text-sm font-bold text-muted-foreground/70">
-                  Pengaturan
-                </h2>
+              <div className="px-2 pt-3 pb-2">
+                <p className="text-xs font-medium text-muted-foreground">Pengaturan</p>
               </div>
               <SidebarMenu>
                 {data.nav.map((item) => (
@@ -266,10 +256,10 @@ export function UserSettingsDialog({
                       isActive={selectedItem === item.name}
                       onClick={() => setSelectedItem(item.name)}
                       className={cn(
-                        "w-full justify-start gap-3 px-3 py-2.5 rounded-lg transition-all",
+                        "w-full justify-start gap-2.5 px-2 h-8 rounded-md transition-colors",
                         selectedItem === item.name
-                          ? "bg-primary/10 text-primary font-bold shadow-sm"
-                          : "text-muted-foreground hover:bg-muted/50"
+                          ? "bg-muted text-foreground font-medium"
+                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                       )}
                     >
                       <item.icon className="h-4 w-4" />
@@ -282,175 +272,175 @@ export function UserSettingsDialog({
           </Sidebar>
 
           <main className="flex flex-1 flex-col min-h-0 bg-background h-full relative">
-            <div className="flex items-center justify-between p-4 md:p-6 pb-2 border-b md:border-0">
-              <div className="flex items-center gap-3">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSelectedItem(null)}
-                  className={cn("md:hidden h-8 w-8", !selectedItem && "invisible")}
-                >
-                  <CaretLeft weight="duotone" className="h-5 w-5" />
-                </Button>
-                <div>
-                  <DialogTitle className="text-xl md:text-2xl font-bold tracking-tight">
-                    {selectedItem || "Pengaturan"}
-                  </DialogTitle>
-                </div>
-              </div>
+            <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4 pr-14 md:px-6">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSelectedItem(null)}
+                className={cn("md:hidden h-7 w-7 -ml-1", !selectedItem && "hidden")}
+                aria-label="Kembali"
+              >
+                <CaretLeft className="h-4 w-4" />
+              </Button>
+              <DialogTitle className="text-base font-semibold">
+                {selectedItem || "Pengaturan"}
+              </DialogTitle>
+              <DialogDescription className="sr-only">
+                Kelola profil, keamanan akun, dan tampilan aplikasi.
+              </DialogDescription>
             </div>
 
-            <ScrollArea className="flex-1">
-              <div className="p-4 md:p-6 pt-2 pb-24 md:pb-32">
+            <ScrollArea className="flex-1 min-h-0">
+              <div className="p-4 md:p-6">
                 {selectedItem === "Profil" && (
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in duration-500">
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                     {/* LEFT COLUMN: EDIT FORM */}
-                    <div className="lg:col-span-7 space-y-6">
-                      {/* Integrated Header: Banner & Avatar */}
-                      <div className="relative mb-14">
-                        <Label className="text-sm font-bold mb-3 block">Visual Profil</Label>
-                        <div className="relative group/banner h-32 rounded-xl overflow-hidden border border-border bg-muted/20 shadow-inner">
+                    <div className="lg:col-span-7 space-y-5 min-w-0">
+                      {/* Banner & avatar */}
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-medium text-muted-foreground">Banner dan foto profil</p>
+                        <div className="relative">
                           <div
-                            className="w-full h-full"
-                            style={{
-                              background: isBannerUrl ? `url(${banner}) center/cover no-repeat` : banner,
-                            }}
-                          />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/banner:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              className="h-8 text-xs font-bold"
+                            className="relative group/banner h-28 rounded-lg overflow-hidden border border-border bg-muted"
+                            style={banner ? { background: isBannerUrl ? `url(${banner}) center/cover no-repeat` : banner } : undefined}
+                          >
+                            <button
+                              type="button"
+                              className="absolute bottom-2 right-2 flex h-7 items-center gap-1 rounded-md bg-black/40 px-2 text-xs text-white hover:bg-black/60 transition-colors disabled:opacity-60"
                               onClick={() => bannerInputRef.current?.click()}
                               disabled={isBannerUploading}
                             >
-                              {isBannerUploading ? <CircleNotch weight="duotone" className="w-3 h-3 animate-spin mr-1" /> : <Camera className="w-3 h-3 mr-1" />}
-                              Ubah Banner
-                            </Button>
-                          </div>
-                          <input
-                            type="file"
-                            ref={bannerInputRef}
-                            onChange={handleBannerUpload}
-                            className="hidden"
-                            accept="image/*"
-                          />
-                        </div>
-
-                        {/* Overlapping Avatar */}
-                        <div className="absolute -bottom-10 left-4 flex items-end gap-4">
-                          <div className="relative group/avatar shrink-0">
-                            <div
-                              className="cursor-pointer rounded-2xl overflow-hidden border-4 border-background shadow-lg"
-                              onClick={() => setIsLightboxOpen(true)}
-                            >
-                              <UserAvatar
-                                src={avatar}
-                                className="h-20 w-20 rounded-xl"
-                              />
-                            </div>
-                            <button
-                              onClick={() => fileInputRef.current?.click()}
-                              disabled={isUploading}
-                              className="absolute inset-0 bg-black/40 opacity-0 group-hover/avatar:opacity-100 flex items-center justify-center rounded-xl transition-opacity"
-                              title="Ubah Foto Profil"
-                            >
-                              {isUploading ? <CircleNotch weight="duotone" className="h-5 w-5 animate-spin text-white" /> : <Camera className="h-5 w-5 text-white" />}
+                              {isBannerUploading ? <CircleNotch className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+                              Ubah banner
                             </button>
                             <input
                               type="file"
-                              ref={fileInputRef}
-                              onChange={handleFileUpload}
+                              ref={bannerInputRef}
+                              onChange={handleBannerUpload}
                               className="hidden"
                               accept="image/*"
                             />
                           </div>
+
+                          {/* Overlapping avatar */}
+                          <div className="absolute -bottom-10 left-4">
+                            <div className="relative">
+                              <button
+                                type="button"
+                                className="block rounded-full ring-4 ring-background"
+                                onClick={() => setIsLightboxOpen(true)}
+                                aria-label="Lihat foto profil"
+                              >
+                                <UserAvatar
+                                  src={avatar}
+                                  className="h-20 w-20 rounded-full"
+                                />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={isUploading}
+                                className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-popover text-muted-foreground shadow-sm hover:text-foreground transition-colors disabled:opacity-60"
+                                title="Ubah foto profil"
+                                aria-label="Ubah foto profil"
+                              >
+                                {isUploading ? <CircleNotch className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+                              </button>
+                              <input
+                                type="file"
+                                ref={fileInputRef}
+                                onChange={handleFileUpload}
+                                className="hidden"
+                                accept="image/*"
+                              />
+                            </div>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Color Presets - Moved below banner/avatar */}
-                      <div className="flex flex-wrap items-center gap-1.5 pt-2">
-                        <div className="relative h-6 w-6 rounded-md overflow-hidden border border-border cursor-pointer ring-offset-background focus-within:ring-2 ring-primary">
+                      {/* Banner colour presets */}
+                      <div className="flex flex-wrap items-center justify-end gap-1.5 pl-28">
+                        {presetBanners.map((p) => (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => setBanner(p)}
+                            className={cn(
+                              "h-5 w-5 rounded-full border border-black/10 transition-shadow",
+                              banner === p && "ring-2 ring-foreground ring-offset-2 ring-offset-background"
+                            )}
+                            style={{ background: p }}
+                            aria-label={`Warna banner ${p}`}
+                          />
+                        ))}
+                        <label
+                          className="relative h-5 w-5 rounded-full overflow-hidden border border-border cursor-pointer focus-within:ring-2 focus-within:ring-ring"
+                          title="Warna lain"
+                        >
                           <input
                             type="color"
                             className="absolute -top-1 -left-1 h-8 w-8 cursor-pointer"
                             onChange={(e) => setBanner(e.target.value)}
                             value={!isBannerUrl && !presetBanners.includes(banner) ? banner : "#ffffff"}
+                            aria-label="Pilih warna banner lain"
                           />
-                        </div>
-                        {presetBanners.map((p) => (
-                          <button
-                            key={p}
-                            onClick={() => setBanner(p)}
-                            className={cn(
-                              "h-6 w-10 rounded-md border transition-all hover:scale-105",
-                              banner === p ? "ring-2 ring-primary ring-offset-1 scale-105" : "border-border"
-                            )}
-                            style={{ background: p }}
-                          />
-                        ))}
+                        </label>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                        <div className="grid gap-2">
-                          <Label htmlFor="displayName" className="text-sm font-bold">Nama Tampilan</Label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid gap-1.5">
+                          <Label htmlFor="displayName" className="text-xs">Nama tampilan</Label>
                           <Input
                             id="displayName"
                             value={displayName}
                             onChange={(e) => setDisplayName(e.target.value)}
-                            className="h-10 bg-muted/20 focus:bg-background transition-colors"
-                            placeholder="Masukkan nama tampilan"
+                            placeholder="Nama yang dilihat orang lain"
                           />
                         </div>
 
-                        <div className="grid gap-2">
-                          <Label htmlFor="username" className="text-sm font-bold">Handle</Label>
+                        <div className="grid gap-1.5">
+                          <Label htmlFor="username" className="text-xs">Nama pengguna</Label>
                           <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">@</span>
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">@</span>
                             <Input
                               id="username"
                               value={username}
                               onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
-                              className="h-10 pl-7 font-medium bg-muted/20 focus:bg-background transition-colors"
+                              className="pl-7"
                               placeholder="username"
                             />
                           </div>
                         </div>
                       </div>
 
-                      {/* Handle Warning - More compact */}
-                      <div className="px-4 py-3 rounded-lg bg-accent/50 border border-border flex items-center gap-3">
-                        <WarningCircle weight="duotone" className="w-4 h-4 text-muted-foreground shrink-0" />
-                        <p className="text-xs text-muted-foreground leading-tight">
-                          Mengubah handle akan mengubah alamat profil Anda di seluruh jaringan.
-                        </p>
-                      </div>
+                      <p className="flex items-start gap-2 text-xs text-muted-foreground -mt-2">
+                        <Info className="h-3.5 w-3.5 shrink-0 mt-px" />
+                        Mengubah nama pengguna juga mengubah alamat profil kamu.
+                      </p>
 
-                      <div className="grid gap-2">
-                        <Label htmlFor="status" className="text-sm font-bold flex items-center gap-2">
-                          Status Kustom <Sparkle weight="duotone" className="w-3.5 h-3.5 text-primary" />
-                        </Label>
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="status" className="text-xs">Status</Label>
                         <Input
                           id="status"
                           value={customStatus}
                           onChange={(e) => setCustomStatus(e.target.value)}
-                          className="h-10 bg-muted/20 focus:bg-background transition-colors"
-                          placeholder="Apa yang sedang terjadi?"
+                          placeholder="Sedang apa sekarang?"
                           maxLength={100}
                         />
                       </div>
 
-                      <div className="grid gap-2">
+                      <div className="grid gap-1.5">
                         <div className="flex justify-between items-end">
-                          <Label htmlFor="bio" className="text-sm font-bold">Bio</Label>
-                          <p className="text-[10px] text-muted-foreground">{bio.length}/250</p>
+                          <Label htmlFor="bio" className="text-xs">Bio</Label>
+                          <span className="text-xs text-muted-foreground tabular-nums">{bio.length}/250</span>
                         </div>
-                        <textarea
+                        <Textarea
                           id="bio"
                           value={bio}
                           onChange={(e) => setBio(e.target.value)}
-                          className="flex min-h-[80px] w-full rounded-lg border border-input bg-muted/20 focus:bg-background px-3 py-2 text-sm focus-visible:outline-none focus:ring-1 focus:ring-primary resize-none transition-colors"
-                          placeholder="Ceritakan tentang diri Anda..."
+                          className="resize-none"
+                          rows={3}
+                          placeholder="Ceritakan sedikit tentang dirimu"
                           maxLength={250}
                         />
                       </div>
@@ -458,56 +448,38 @@ export function UserSettingsDialog({
 
                     {/* RIGHT COLUMN: PREVIEW */}
                     <div className="hidden lg:col-span-5 lg:flex flex-col">
-                      <div className="sticky top-0">
-                        <Label className="text-sm font-bold mb-3 block">Pratinjau Profil</Label>
-                        <div className="w-full max-w-[300px] mx-auto rounded-2xl overflow-hidden bg-card border border-border shadow-xl animate-in zoom-in-95 duration-500">
-                          {/* Mini Banner */}
+                      <div className="sticky top-0 space-y-1.5">
+                        <p className="text-xs font-medium text-muted-foreground">Pratinjau</p>
+                        <div className="w-full max-w-[300px] rounded-lg overflow-hidden bg-card border border-border">
+                          {/* Mini banner */}
                           <div
-                            className="h-24 w-full bg-muted relative"
-                            style={{
-                              background: isBannerUrl ? `url(${banner}) center/cover no-repeat` : banner || "var(--muted)",
-                            }}
-                          >
-                            <div className="absolute inset-0 bg-gradient-to-t from-background/60 to-transparent" />
-                          </div>
+                            className="h-20 w-full bg-muted"
+                            style={banner ? { background: isBannerUrl ? `url(${banner}) center/cover no-repeat` : banner } : undefined}
+                          />
 
-                          <div className="relative px-4 pb-6 pt-10">
-                            {/* Overlapping Avatar */}
-                            <div className="absolute -top-12 left-3">
-                              <div className="p-1 bg-card rounded-xl ring-1 ring-border shadow-xl">
-                                <UserAvatar src={avatar} className="h-20 w-20 rounded-lg" />
-                                <div className="absolute bottom-1.5 right-1.5 h-4 w-4 rounded-full border-2 border-card bg-emerald-500 shadow-sm" />
-                              </div>
+                          <div className="px-4 pb-4">
+                            <div className="-mt-8 relative w-fit">
+                              <UserAvatar src={avatar} className="h-16 w-16 rounded-full ring-4 ring-card" />
+                              <span className="absolute bottom-0.5 right-0.5 h-3.5 w-3.5 rounded-full bg-emerald-500 ring-[3px] ring-card" />
                             </div>
 
-                            {/* Info */}
-                            <div className="space-y-4">
-                              <div className="flex flex-col">
-                                <h3 className="text-lg font-bold text-foreground tracking-tight leading-tight truncate">
+                            <div className="mt-2 space-y-3">
+                              <div className="min-w-0">
+                                <p className="text-base font-semibold leading-tight truncate">
                                   {displayName || username || user.username}
-                                </h3>
-                                <p className="text-xs text-muted-foreground font-mono">@{username || user.username}</p>
-                                {customStatus && (
-                                  <div className="flex items-center gap-2 mt-1.5">
-                                    <Sparkle weight="duotone" className="w-3.5 h-3.5 text-primary" />
-                                    <p className="text-xs text-muted-foreground leading-none truncate">{customStatus}</p>
-                                  </div>
-                                )}
+                                </p>
+                                <p className="text-xs text-muted-foreground">@{username || user.username}</p>
                               </div>
 
-                              <p className="text-sm text-muted-foreground leading-relaxed italic line-clamp-4">
-                                {bio || "Belum ada biografi..."}
-                              </p>
+                              {customStatus && (
+                                <p className="rounded-md bg-muted/60 px-2.5 py-1.5 text-xs break-words">{customStatus}</p>
+                              )}
 
-                              <div className="flex flex-col gap-2 pt-4 border-t border-border">
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  disabled
-                                  className="w-full h-9 text-xs font-bold"
-                                >
-                                  Lihat Profil
-                                </Button>
+                              <div className="space-y-1">
+                                <p className="text-xs font-medium text-muted-foreground">Tentang</p>
+                                <p className={cn("text-sm leading-relaxed line-clamp-4 break-words", !bio && "text-muted-foreground")}>
+                                  {bio || "Belum ada bio."}
+                                </p>
                               </div>
                             </div>
                           </div>
@@ -515,98 +487,90 @@ export function UserSettingsDialog({
                       </div>
                     </div>
                   </div>
-                )  }
+                )}
 
                 {selectedItem === "Keamanan" && (
-                  <div className="animate-in fade-in duration-300 space-y-8">
-                    <div className="p-5 rounded-xl border border-border bg-muted/30 flex gap-4">
-                      <div className="h-10 w-10 rounded-full bg-accent flex items-center justify-center shrink-0">
-                        <Shield className="h-5 w-5 text-accent-foreground" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold">Keamanan Akun</p>
-                        <p className="text-xs text-muted-foreground leading-relaxed mt-1">
-                          Gunakan kata sandi yang kuat dan unik untuk melindungi akun Anda dari akses yang tidak sah. Minimal 8 karakter dengan kombinasi angka dan simbol.
-                        </p>
-                      </div>
+                  <div className="max-w-md space-y-5">
+                    <div>
+                      <p className="text-sm font-medium">Ubah kata sandi</p>
+                      <p className="text-xs text-muted-foreground leading-relaxed mt-0.5">
+                        Gunakan kata sandi yang kuat dan unik, minimal 8 karakter dengan kombinasi angka dan simbol.
+                      </p>
                     </div>
 
-                    <div className="space-y-6">
-                      <div className="grid gap-2">
-                        <Label className="text-sm font-bold">Kata Sandi Saat Ini</Label>
+                    <div className="space-y-4">
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="old-password" className="text-xs">Kata sandi saat ini</Label>
                         <Input
+                          id="old-password"
                           type="password"
                           value={oldPassword}
                           onChange={(e) => setOldPassword(e.target.value)}
-                          className="bg-muted/20 h-10 border-border focus:bg-background transition-colors"
                           placeholder="••••••••"
                         />
                       </div>
-                      <div className="grid gap-2">
-                        <Label className="text-sm font-bold">Kata Sandi Baru</Label>
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="new-password" className="text-xs">Kata sandi baru</Label>
                         <Input
+                          id="new-password"
                           type="password"
                           value={newPassword}
                           onChange={(e) => setNewPassword(e.target.value)}
-                          className="bg-muted/20 h-10 border-border focus:bg-background transition-colors"
                           placeholder="Minimal 8 karakter"
                         />
                       </div>
-                      <div className="grid gap-2">
-                        <Label className="text-sm font-bold">Konfirmasi Kata Sandi Baru</Label>
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="confirm-password" className="text-xs">Konfirmasi kata sandi baru</Label>
                         <Input
+                          id="confirm-password"
                           type="password"
                           value={confirmPassword}
                           onChange={(e) => setConfirmPassword(e.target.value)}
-                          className="bg-muted/20 h-10 border-border focus:bg-background transition-colors"
                           placeholder="Ulangi kata sandi baru"
                         />
                       </div>
                     </div>
 
-                    <div className="pt-4 flex justify-end w-full sm:w-auto">
+                    <div className="flex justify-end">
                       <Button
-                        variant="default"
                         onClick={handleChangePassword}
                         disabled={isUpdating || !newPassword}
-                        className="w-full sm:w-auto sm:px-10 font-bold h-11 shadow-lg"
+                        className="w-full sm:w-auto"
                       >
-                        {isUpdating ? <CircleNotch weight="duotone" className="mr-2 h-4 w-4 animate-spin" /> : <><Key className="mr-2 h-4 w-4" /> Perbarui Kata Sandi</>}
+                        {isUpdating && <CircleNotch className="mr-2 h-4 w-4 animate-spin" />}
+                        Simpan kata sandi
                       </Button>
                     </div>
                   </div>
                 )}
 
                 {selectedItem === "Tampilan" && (
-                  <div className="flex flex-col items-center justify-center py-20 space-y-6 text-center animate-in fade-in duration-300">
-                    <div className="h-20 w-20 rounded-full bg-accent flex items-center justify-center mb-2">
-                      <Paintbrush className="h-10 w-10 text-muted-foreground" />
-                    </div>
-                    <div className="space-y-2">
-                      <h3 className="text-lg font-bold tracking-tight">Tema & Kustomisasi</h3>
-                      <p className="text-sm text-muted-foreground max-w-sm mx-auto leading-relaxed">
-                        Kami sedang menyiapkan fitur untuk mengubah tema kustom dan warna aksen agar aplikasi terasa lebih personal.
-                      </p>
-                    </div>
-                    <Button variant="secondary" className="px-8 font-bold" disabled>
-                      Coming Soon
-                    </Button>
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <Paintbrush className="h-8 w-8 text-muted-foreground mb-4" strokeWidth={1.5} />
+                    <p className="text-sm font-medium">Tema dan warna aksen</p>
+                    <p className="text-sm text-muted-foreground max-w-sm mx-auto leading-relaxed mt-1">
+                      Pengaturan tema dan warna aksen sedang disiapkan.
+                    </p>
+                    <span className="mt-4 inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground">
+                      Segera hadir
+                    </span>
                   </div>
                 )}
 
-                {/* Mobile Navigation List (Visible when selectedItem is null) */}
+                {/* Mobile navigation list (visible when selectedItem is null) */}
                 {!selectedItem && (
-                  <div className="md:hidden animate-in slide-in-from-left-4 duration-300">
+                  <div className="md:hidden -mx-4 -mt-4">
                     {data.nav.map((item) => (
                       <button
                         key={item.name}
                         onClick={() => setSelectedItem(item.name)}
-                        className="w-full flex items-center justify-between p-4 border-b border-border hover:bg-muted/50 transition-colors"
+                        className="w-full flex items-center justify-between px-4 py-3.5 border-b border-border hover:bg-muted/60 transition-colors"
                       >
                         <div className="flex items-center gap-3">
-                          <item.icon className="h-5 w-5 text-muted-foreground" />
-                          <span className="font-bold">{item.name}</span>
+                          <item.icon className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">{item.name}</span>
                         </div>
+                        <CaretRight className="h-4 w-4 text-muted-foreground" />
                       </button>
                     ))}
                   </div>
@@ -615,33 +579,15 @@ export function UserSettingsDialog({
             </ScrollArea>
 
             {selectedItem === "Profil" && isDirty && (
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)] md:w-[calc(100%-4rem)] max-w-2xl bg-card/95 backdrop-blur-md text-card-foreground px-3 sm:px-4 py-3 rounded-xl flex items-center justify-between shadow-2xl animate-in slide-in-from-bottom-8 duration-300 z-50 border border-border">
-                <div className="flex items-center gap-2 sm:gap-3 mr-2">
-                  <div className="hidden sm:flex h-8 w-8 items-center justify-center rounded-full bg-accent text-primary">
-                    <Sparkle weight="duotone" className="h-4 w-4" />
-                  </div>
-                  <span className="text-[12px] sm:text-sm font-medium leading-tight text-foreground">
-                    <span className="hidden xs:inline">Hati-hati — ada </span>perubahan belum disimpan!
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleReset}
-                    className="hover:bg-accent h-8 sm:h-9 px-2 sm:px-4 text-xs sm:text-sm font-bold transition-colors"
-                  >
-                    Reset
+              <div className="shrink-0 flex items-center justify-between gap-3 border-t border-border bg-muted/40 px-4 md:px-6 py-2.5 animate-in fade-in slide-in-from-bottom-1 duration-150">
+                <span className="text-xs text-muted-foreground">Ada perubahan yang belum disimpan</span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Button variant="ghost" size="sm" onClick={handleReset} className="h-8 text-xs">
+                    Batalkan
                   </Button>
-                  <Button
-                    size="sm"
-                    onClick={handleUpdateProfile}
-                    disabled={isUpdating}
-                    className="bg-primary text-primary-foreground border-0 h-8 sm:h-9 px-3 sm:px-6 text-xs sm:text-sm font-bold shadow-lg transition-all active:scale-95"
-                  >
-                    {isUpdating ? <CircleNotch weight="duotone" className="h-3 w-3 sm:h-4 sm:w-4 animate-spin mr-1.5 sm:mr-2" /> : null}
-                    <span className="hidden sm:inline">Simpan Perubahan</span>
-                    <span className="sm:hidden">Simpan</span>
+                  <Button size="sm" onClick={handleUpdateProfile} disabled={isUpdating} className="h-8 text-xs">
+                    {isUpdating && <CircleNotch className="h-3.5 w-3.5 animate-spin mr-1.5" />}
+                    Simpan
                   </Button>
                 </div>
               </div>

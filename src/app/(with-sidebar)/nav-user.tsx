@@ -19,6 +19,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { clientChatCache } from "@/lib/infrastructure/cache/client-cache";
 import { signOutUserAction } from "../auth.action";
 import { stopImpersonation } from "../impersonate.action";
 import { useIsImpersonating } from "@/hooks/use-impersonation";
@@ -67,6 +68,7 @@ export function NavUser({
   };
 
   const handleLogout = async () => {
+    await clientChatCache.clearAll();
     await signOutUserAction();
   };
 
@@ -99,15 +101,15 @@ export function NavUser({
                         Impersonasi: @{impersonatedUser?.username}
                       </span>
                     ) : (
-                      <span className="truncate font-semibold text-prime">
+                      <span className="truncate font-semibold text-foreground">
                         {user.name}
                       </span>
                     )}
-                    <span className="truncate text-xs dark:text-slate-500">
+                    <span className="truncate text-xs text-muted-foreground">
                       {isImpersonating ? "Klik untuk stop" : user.role}
                     </span>
                   </div>
-                  <CaretUpDown weight="duotone" className="ml-auto size-4" />
+                  <CaretUpDown weight="duotone" className="ml-auto size-4 text-muted-foreground" />
                 </>
               )}
             </SidebarMenuButton>
@@ -131,11 +133,11 @@ export function NavUser({
                       @{impersonatedUser?.username}
                     </span>
                   ) : (
-                    <span className="truncate font-semibold text-prime">
+                    <span className="truncate font-semibold text-foreground">
                       {user.name}
                     </span>
                   )}
-                  <span className="truncate text-xs dark:text-slate-500">
+                  <span className="truncate text-xs text-muted-foreground">
                     {isImpersonating ? "Impersonasi" : user.role}
                   </span>
                 </div>

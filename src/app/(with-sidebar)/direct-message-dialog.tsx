@@ -11,7 +11,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { searchUsersAction } from "./user.action";
 
 interface User {
@@ -99,62 +98,51 @@ export function DirectMessageDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md p-0 gap-0 overflow-hidden rounded-2xl border-border/40 bg-background">
-        <DialogHeader className="p-6 pb-2">
-          <DialogTitle className="text-xl font-semibold tracking-tight">
-            mulai percakapan
-          </DialogTitle>
+      <DialogContent className="sm:max-w-md p-0 gap-0 overflow-hidden">
+        <DialogHeader className="px-5 pt-5 pb-3">
+          <DialogTitle>Pesan baru</DialogTitle>
         </DialogHeader>
 
-        <div className="px-6 py-2">
-          <div className="relative group">
-            <MagnifyingGlass weight="duotone" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-primary/60" />
+        <div className="px-5 pb-3">
+          <div className="relative">
+            <MagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="cari pengguna..."
+              placeholder="Cari nama atau username"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 h-10 rounded-xl bg-muted/30 border-border/50 focus-visible:ring-primary/20"
+              className="pl-9"
               autoFocus
             />
+            {isLoading && (
+              <CircleNotch className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+            )}
           </div>
         </div>
 
-        <div className="max-h-[350px] overflow-hidden flex flex-col mt-2 px-3 pb-4">
-          {isLoading ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground">
-              <CircleNotch weight="duotone" className="h-7 w-7 animate-spin text-primary/60" />
-              <p className="text-sm font-medium">mencari pengguna...</p>
-            </div>
-          ) : searchQuery && users.length === 0 ? (
-            <div className="py-20 text-center text-muted-foreground/60 italic text-sm">
-              tidak ada pengguna yang cocok.
-            </div>
-          ) : users.length > 0 ? (
-            <ScrollArea className="h-full">
-              <div className="space-y-1 p-1">
-                {users.map((user) => (
-                  <Button
-                    key={user.id}
-                    variant="ghost"
-                    className="w-full justify-start h-auto p-3 rounded-xl hover:bg-accent/40 active:bg-accent/60 transition-all border border-transparent hover:border-border/40"
+        <div className="border-t border-border min-h-[200px] max-h-[360px] overflow-y-auto">
+          {users.length > 0 ? (
+            <ul className="p-1.5">
+              {users.map((user) => (
+                <li key={user.id}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none transition-colors"
                     onClick={() => handleUserSelect(user.id)}
                   >
-                    <UserAvatar 
-                      src={user.avatar} 
-                      alt={user.username}
-                      className="h-10 w-10 border border-border/50 transition-all mr-3"
-                    />
-                    <span className="text-sm font-bold">
-                      {user.username}
-                    </span>
-                  </Button>
-                ))}
-              </div>
-            </ScrollArea>
+                    <UserAvatar src={user.avatar} alt={user.username} className="h-8 w-8 rounded-full" />
+                    <span className="text-sm font-medium truncate">@{user.username}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
           ) : (
-            <div className="py-20 text-center text-muted-foreground/40 text-sm font-medium">
-              ketik untuk mencari pengguna
-            </div>
+            <p className="px-5 py-12 text-center text-sm text-muted-foreground">
+              {isLoading
+                ? "Mencari…"
+                : searchQuery
+                  ? "Tidak ada pengguna yang cocok."
+                  : "Ketik untuk mencari orang yang ingin kamu ajak bicara."}
+            </p>
           )}
         </div>
       </DialogContent>

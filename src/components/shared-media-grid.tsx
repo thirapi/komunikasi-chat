@@ -36,8 +36,8 @@ export function SharedMediaGrid({ currentUserId, profileUsername }: SharedMediaG
 
   if (isLoading) {
     return (
-      <div className="px-6 pb-8">
-        <h3 className="text-sm font-semibold text-foreground/70 mb-3">Media</h3>
+      <div className="px-4 pb-8 md:px-6">
+        <h3 className="mb-3 text-sm font-medium">Media</h3>
         <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-1">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="aspect-square bg-muted rounded-sm animate-pulse" />
@@ -51,9 +51,9 @@ export function SharedMediaGrid({ currentUserId, profileUsername }: SharedMediaG
 
   return (
     <>
-      <div className="px-6 pb-8">
-        <h3 className="text-sm font-semibold text-foreground/70 mb-3">
-          Media <span className="text-muted-foreground font-normal">{media.length}</span>
+      <div className="px-4 pb-8 md:px-6">
+        <h3 className="mb-3 text-sm font-medium">
+          Media <span className="font-normal text-muted-foreground tabular-nums">{media.length}</span>
         </h3>
         <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-1">
           {media.map((attachment, idx) => {

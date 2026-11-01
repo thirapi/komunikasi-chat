@@ -4,16 +4,10 @@ import * as React from "react";
 import {
   SidebarMenu,
   SidebarMenuItem,
-  // SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/use-mobile";
 import Link from "next/link";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 type Brand = {
   name: string;
@@ -31,70 +25,44 @@ export function NavBrand({ brand }: { brand: Brand }) {
     <SidebarMenu>
       <SidebarMenuItem
         className={`flex items-center ${
-          isCollapsed ? "justify-center" : "justify-between gap-2"
+          isCollapsed ? "justify-center" : "justify-between"
         }`}
       >
         {isCollapsed ? (
-          <div className="relative group flex items-center justify-center size-12">
-            <div className="absolute flex items-center justify-center transition-opacity group-hover:opacity-0 group-hover:pointer-events-none">
-              <brand.logo size={40} />
-            </div>
-
-            {!isMobile && (
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity relative z-10">
-                {/* 
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <SidebarTrigger className="flex items-center justify-center size-12 rounded-lg" />
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    <p>Buka sidebar</p>
-                  </TooltipContent>
-                </Tooltip> 
-                */}
-              </div>
-            )}
+          <div className="relative group flex items-center justify-center size-10">
+            <Link
+              href="/channels/default"
+              className="flex items-center justify-center rounded-lg p-1.5 hover:bg-sidebar-accent/60 transition-colors"
+              title="Komunikasi"
+            >
+              <brand.logo size={26} />
+            </Link>
           </div>
         ) : (
-          <>
-            <Link href="/channels/default" className="flex-1">
-              <div className="flex items-center gap-1 w-full p-2 rounded-lg group transition-colors">
-
-                <div className="flex items-center gap-1 w-full group-hover:scale-[1.03] origin-left">
-                  <div className="flex items-center justify-center shrink-0">
-                    <brand.logo size={32} />
-                  </div>
-
-                  <div className="flex items-center flex-1 text-left">
-                    <span
-                      className="text-3xl font-brand font-[550] text-prime tracking-tight leading-none"
-                      style={{
-                        transform: "skewX(-7deg)",
-                        display: "inline-block",
-                      }}
-                    >
-                      {brand.name}
-                    </span>
-                  </div>
-                </div>
+          <Link href="/channels/default" className="flex-1 min-w-0">
+            <div className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-xl group transition-all duration-150 hover:bg-sidebar-accent/50">
+              <div className="flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105">
+                <brand.logo size={28} />
               </div>
-            </Link>
 
-            {!isMobile &&
-              /* 
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <SidebarTrigger className="shrink-0" />
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p>Tutup sidebar</p>
-                </TooltipContent>
-              </Tooltip> 
-              */
-              null}
-          </>
+              <div className="flex flex-col min-w-0 text-left">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-[15px] tracking-tight text-foreground group-hover:text-primary transition-colors leading-tight truncate">
+                    komunikasi
+                  </span>
+                  <span className="text-[10px] font-semibold tracking-wide uppercase px-1.5 py-0.2 rounded-full bg-primary/10 text-primary shrink-0">
+                    chat
+                  </span>
+                </div>
+                <span className="text-[11px] text-muted-foreground/75 font-normal leading-tight truncate mt-0.5">
+                  {brand.description || "webchat sederhana"}
+                </span>
+              </div>
+            </div>
+          </Link>
         )}
       </SidebarMenuItem>
     </SidebarMenu>
   );
 }
+
