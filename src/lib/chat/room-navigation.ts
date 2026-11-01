@@ -2,8 +2,7 @@
 
 import type React from "react";
 import { clientChatCache } from "@/lib/infrastructure/cache/client-cache";
-import { getRoom } from "@/app/(with-sidebar)/channels/[roomId]/room.action";
-import { getMessage } from "@/app/(with-sidebar)/channels/[roomId]/messages.action";
+import { getRoomSnapshot } from "@/app/(with-sidebar)/channels/[roomId]/room.action";
 
 const ROOM_PATH = /^\/channels\/([^/?#]+)/;
 
@@ -73,13 +72,12 @@ export function prefetchRoom(roomId: string) {
       ]);
       if (room && messages) return;
 
-      const roomRes = await getRoom(roomId);
-      if (roomRes.status !== "success" || !roomRes.data) return;
-      const msgRes = await getMessage(roomId, 50);
-      await clientChatCache.setRoom(roomId, roomRes.data);
-      if (msgRes.status === "success" && msgRes.data) {
-        await clientChatCache.setMessages(roomId, msgRes.data);
-      }
+      const res = await getRoomSnapshot(roomId);
+      if (res.status !== "success" || !res.data) return;
+      const { room: roomData, messages: fetched, lastRead } = res.data;
+      await clientChatCache.setRoom(roomId, roomData);
+      await clientChatCache.setMessages(roomId, fetched);
+      await clientChatCache.setLastRead(roomId, lastRead.id, lastRead.at ? new Date(lastRead.at) : null);
     } catch (e) {
       console.warn("[prefetchRoom] failed", e);
     } finally {

@@ -1,8 +1,7 @@
 "use client";
 
 import { roomChannel } from "@/lib/pusher/channels";
-import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from "react";
-import { debounce } from "@/lib/debounce";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { getPusher } from "@/lib/pusher/pusher.client";
 import { getMessage, updateLastReadAt, editMessageAction, toggleReactionAction } from "../messages.action";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -51,6 +50,8 @@ interface ChatRoomProps {
   initialMessages: MessageWithUserDTO[];
   lastReadMessageId: string | null;
   lastReadAt: Date | null;
+  /** Data came from the server (false while showing the local cache). */
+  isFresh?: boolean;
   user: {
     id: string;
     name: string;
@@ -66,6 +67,7 @@ export function ChatRoom({
   lastReadMessageId,
   lastReadAt,
   user,
+  isFresh = false,
 }: ChatRoomProps) {
   const [messages, setMessages] = useState(initialMessages);
   const [localRoomData, setLocalRoomData] = useState(roomData);
@@ -158,10 +160,20 @@ export function ChatRoom({
 
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Following the newest message (see useAutoScroll). Starts false when the
+  // room restores a saved reading position.
+  const stickToBottomRef = useRef(roomScrollMemory.get(roomData.id) == null);
+
   const revealMessage = useCallback((messageId: string, behavior: ScrollBehavior = "smooth") => {
     const element = document.getElementById(`message-${messageId}`);
     if (!element) return false;
+    stickToBottomRef.current = false;
     element.scrollIntoView({ behavior, block: "center" });
+    // Already in view means no scroll and no scroll event to correct this.
+    const viewport = viewportRef.current;
+    requestAnimationFrame(() => {
+      if (viewport && Math.abs(viewport.scrollTop) <= 32) stickToBottomRef.current = true;
+    });
     setHighlightedMessageId(messageId);
     if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
     highlightTimerRef.current = setTimeout(() => setHighlightedMessageId(null), 2000);
@@ -327,13 +339,25 @@ export function ChatRoom({
     [roomData.name, roomData.id, roomData.isDirect, userId, user.username, localRoomData.participants],
   );
 
-  const markAsReadApi = useMemo(
-    () =>
-      debounce(async (messageId?: string) => {
+  const commitRead = useCallback(
+    (messageId?: string) => {
         if (!userId || userId === "" || userId === "null") return;
 
         // If no messageId provided, use the last message in the list
         let targetId = messageId || messagesRef.current[messagesRef.current.length - 1]?.id;
+
+        // Reading up to the newest message clears the sidebar even when the
+        // read position itself is already persisted (e.g. read on another
+        // device, or the server's sidebar flag was stale). Without this the
+        // early returns below left the dot on a room the user had fully read.
+        const lastReal = messagesRef.current.findLast(
+          (m) => !m.isOptimistic && !m.id.startsWith("optimistic-"),
+        );
+        const lastRealIndex = lastReal ? messagesRef.current.lastIndexOf(lastReal) : -1;
+        const targetIndex = targetId ? messagesRef.current.findIndex((m) => m.id === targetId) : -1;
+        if (lastRealIndex !== -1 && targetIndex >= lastRealIndex) {
+          markSidebarAsRead(roomData.id);
+        }
 
         if (!targetId || targetId === lastPersistedReadIdRef.current)
           return;
@@ -371,8 +395,8 @@ export function ChatRoom({
         setLastReadAtState(targetAt);
         lastPersistedReadIdRef.current = targetId;
 
-        // Sync to sidebar and cache
-        markSidebarAsRead(roomData.id);
+        // Sync cache (the sidebar was handled above: only reaching the newest
+        // message clears it, so a room read halfway stays marked).
         import("@/lib/infrastructure/cache/client-cache").then((m) => {
           m.clientChatCache.setLastRead(roomData.id, targetId, targetAt);
         });
@@ -381,9 +405,54 @@ export function ChatRoom({
         updateLastReadAt(userId, roomData.id, targetId, targetAt).catch(err => {
           console.error("Failed to update last read at server:", err);
         });
-      }, 500),
+      },
     [userId, roomData.id, markSidebarAsRead],
   );
+
+  /**
+   * Batches read updates. Two properties matter here, and the plain debounce
+   * this replaces had neither:
+   * - The furthest target wins. With a debounce the *last call's* argument
+   *   won, so reaching the bottom ("mark everything") followed within 500ms by
+   *   the viewport observer reporting an older message on screen persisted the
+   *   older one: the newest messages stayed unread on the server and the room
+   *   came back unread on the next load.
+   * - It cannot be starved. A debounce restarts on every call, so a busy room
+   *   with observer callbacks arriving faster than 500ms never wrote at all.
+   */
+  const pendingReadTargetRef = useRef<string | true | null>(null);
+  const readTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const commitReadRef = useRef(commitRead);
+  commitReadRef.current = commitRead;
+  const markAsReadApi = useCallback((messageId?: string) => {
+    const current = pendingReadTargetRef.current;
+    if (!messageId) {
+      pendingReadTargetRef.current = true; // the newest message
+    } else if (current === null) {
+      pendingReadTargetRef.current = messageId;
+    } else if (current !== true) {
+      const list = messagesRef.current;
+      if (list.findIndex((m) => m.id === messageId) > list.findIndex((m) => m.id === current)) {
+        pendingReadTargetRef.current = messageId;
+      }
+    }
+    if (readTimerRef.current) return;
+    readTimerRef.current = setTimeout(() => {
+      readTimerRef.current = null;
+      const target = pendingReadTargetRef.current;
+      pendingReadTargetRef.current = null;
+      if (target === null) return;
+      commitReadRef.current(target === true ? undefined : target);
+    }, 400);
+  }, []);
+  useEffect(() => () => {
+    // Leaving the room: write whatever is still queued instead of dropping it.
+    if (readTimerRef.current) clearTimeout(readTimerRef.current);
+    readTimerRef.current = null;
+    const target = pendingReadTargetRef.current;
+    pendingReadTargetRef.current = null;
+    if (target !== null) commitReadRef.current(target === true ? undefined : target);
+  }, []);
 
   // Messages only count as read while the user can actually see them. In a
   // background tab or unfocused window the read is deferred until they return,
@@ -496,6 +565,11 @@ export function ChatRoom({
         // Find the message in current ref to get its timestamp if possible
         let msg = messagesRef.current.find(m => m.id === lastReadId);
 
+        // The read anchor is outside the mounted window (older history): it
+        // was persisted when it was set, and substituting the newest message
+        // here would mark everything read on the way out.
+        if (!msg && !lastReadId.startsWith('optimistic-')) return;
+
         // HARDENING: If the last tracked ID is optimistic, find the latest real one before it
         if (!msg || msg.isOptimistic || lastReadId.startsWith('optimistic-')) {
           const lastRealMsg = messagesRef.current.findLast(m => !m.isOptimistic && !m.id.startsWith('optimistic-'));
@@ -511,7 +585,8 @@ export function ChatRoom({
 
         if (!userId || userId === "" || userId === "null") return;
 
-        markSidebarAsRead(roomData.id);
+        const lastReal = messagesRef.current.findLast((m) => !m.isOptimistic && !m.id.startsWith('optimistic-'));
+        if (lastReal && lastReal.id === lastReadId) markSidebarAsRead(roomData.id);
         updateLastReadAt(userId, roomData.id, lastReadId, at).catch(console.error);
 
         // Also update cache on flush
@@ -663,8 +738,58 @@ export function ChatRoom({
     return () => clearTimeout(t);
   }, [deepLinkId, messages.length, scrollToMessage]);
 
-  useScrollToInitial(messages, unreadRef, bottomRef, skipInitialScrollRef);
-  useAutoScroll(messages, userId, isAtBottom, bottomRef);
+  useScrollToInitial(messages, unreadRef, bottomRef, skipInitialScrollRef, stickToBottomRef);
+  const { userInteractedRef, pinToBottom } = useAutoScroll(
+    messages,
+    userId,
+    viewportRef,
+    stickToBottomRef,
+  );
+
+  // The unread marker and the opening scroll are first decided from the local
+  // cache, which can be stale both ways: missing messages that arrived while
+  // the room was closed, or a read position that moved on another device.
+  // Once the server snapshot is in ("settled") the marker is decided for good,
+  // and if the reader has not touched the scroll yet the view is corrected:
+  // to the marker when it is off screen, otherwise to the newest message.
+  // Falls back to a timer so a failed fetch cannot leave it undecided.
+  const [unreadSettled, setUnreadSettled] = useState(isFresh);
+  useEffect(() => {
+    if (isFresh) setUnreadSettled(true);
+  }, [isFresh]);
+  useEffect(() => {
+    const t = setTimeout(() => setUnreadSettled(true), 4000);
+    return () => clearTimeout(t);
+  }, []);
+  const settleScrollDoneRef = useRef(false);
+  useEffect(() => {
+    if (!unreadSettled || settleScrollDoneRef.current) return;
+    // Two frames: MessageList commits the final marker in its own effect.
+    // The done flag is set inside, so a cancelled run (StrictMode) retries.
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        settleScrollDoneRef.current = true;
+        if (skipInitialScrollRef.current || userInteractedRef.current) return;
+        const viewport = viewportRef.current;
+        const marker = unreadRef.current;
+        if (viewport && marker) {
+          const v = viewport.getBoundingClientRect();
+          const m = marker.getBoundingClientRect();
+          if (m.top < v.top || m.bottom > v.bottom) {
+            marker.scrollIntoView({ behavior: "auto", block: "center" });
+            stickToBottomRef.current = Math.abs(viewport.scrollTop) <= 32;
+          }
+          return;
+        }
+        pinToBottom();
+      });
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, [unreadSettled, pinToBottom, userInteractedRef]);
   useAutoFocusInput(inputRef);
   useMarkAsRead(bottomRef, viewportRef, setIsAtBottom, markAsRead);
 
@@ -944,6 +1069,7 @@ export function ChatRoom({
               editingMessageId={editingMessageId}
               lastReadMessageId={lastReadIdState}
               lastReadAt={lastReadAtState}
+              unreadSettled={unreadSettled}
               onLoadMore={loadMoreMessages}
               hasMore={hasMore}
               isLoadingMore={isLoadingMore}

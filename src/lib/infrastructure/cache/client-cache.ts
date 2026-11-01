@@ -130,6 +130,28 @@ class ClientChatCache {
     }
   }
 
+  /**
+   * A message that arrived live for a room that is not open (via the user
+   * channel). Written into the in-memory copy synchronously, so opening that
+   * room right after the sidebar lit up already shows it on the first frame
+   * instead of the stale cached tail followed by a pop-in once the network
+   * catches up. Rooms that were never cached are left alone; they load fresh.
+   */
+  appendLive(roomId: string, message: MessageWithUserDTO) {
+    if (typeof window === "undefined" || !message?.id) return;
+    if (message.isOptimistic || message.id.startsWith("optimistic-")) return;
+    const cached = this.memMessages.get(roomId);
+    if (!cached || !this.memRooms.has(roomId)) return;
+    if (cached.some((m) => m.id === message.id)) return;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { isOptimistic, sendError, uploadProgress, ...clean } = message;
+    const next = [...cached, clean].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
+    this.memMessages.set(roomId, next.slice(-MAX_MESSAGES_PER_ROOM));
+    void this.mergeMessages(roomId, [clean]);
+  }
+
   async removeMessage(roomId: string, messageId: string) {
     if (typeof window === "undefined") return;
     try {

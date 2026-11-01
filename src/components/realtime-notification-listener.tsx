@@ -12,6 +12,7 @@ import { hapticLight } from "@/lib/native/haptics";
 import { stripMarkdown } from "@/lib/strip-markdown";
 import { navigateToRoom } from "@/lib/chat/room-navigation";
 import { messagePreview } from "@/lib/chat/message-preview";
+import { clientChatCache } from "@/lib/infrastructure/cache/client-cache";
 
 interface Props {
   user: {
@@ -77,6 +78,11 @@ export function RealtimeNotificationListener({ user }: Props) {
       if (message.userId === user.id) {
         return;
       }
+
+      // Put the message in the room's cached history right away, so opening
+      // the room from the sidebar shows it on the first frame instead of the
+      // stale cached tail (the server snapshot only lands a round trip later).
+      clientChatCache.appendLive(roomId, message);
 
       // Keep the sidebar preview, time and ordering live for every room.
       recordActivity(roomId, messagePreview(message, user), message.createdAt ?? new Date());

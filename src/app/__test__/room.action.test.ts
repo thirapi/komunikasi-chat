@@ -3,6 +3,7 @@ import { authState, resetAuthState } from "./auth-test-state";
 import {
   getSidebarData,
   getRoom,
+  getRoomSnapshot,
   createRoom,
   createChannel,
   getPublicRooms,
@@ -15,6 +16,8 @@ import {
 
 import { getSidebarDataController } from "@/lib/interface-adapters/controllers/rooms/get-sidebar-data.controller";
 import { getRoomByIdController } from "@/lib/interface-adapters/controllers/rooms/get-room-by-id.controller";
+import { getMessageController } from "@/lib/interface-adapters/controllers/messages/get-message.controller";
+import { getLastReadAtController } from "@/lib/interface-adapters/controllers/rooms/get-last-read-at.controller";
 import { startDirectMessageController } from "@/lib/interface-adapters/controllers/rooms/start-direct-message.controller";
 import { createRoomController } from "@/lib/interface-adapters/controllers/rooms/create-room.controller";
 import { getPublicRoomsController } from "@/lib/interface-adapters/controllers/rooms/get-public-rooms.controller";
@@ -32,6 +35,8 @@ vi.mock("@/lib/db", () => ({ db: {} }));
 
 vi.mock("@/lib/interface-adapters/controllers/rooms/get-sidebar-data.controller", () => ({ getSidebarDataController: vi.fn() }));
 vi.mock("@/lib/interface-adapters/controllers/rooms/get-room-by-id.controller", () => ({ getRoomByIdController: vi.fn() }));
+vi.mock("@/lib/interface-adapters/controllers/messages/get-message.controller", () => ({ getMessageController: vi.fn() }));
+vi.mock("@/lib/interface-adapters/controllers/rooms/get-last-read-at.controller", () => ({ getLastReadAtController: vi.fn() }));
 vi.mock("@/lib/interface-adapters/controllers/rooms/get-room-by-user-id.controller", () => ({ getRoomByUserIdController: vi.fn() }));
 vi.mock("@/lib/interface-adapters/controllers/rooms/start-direct-message.controller", () => ({ startDirectMessageController: vi.fn() }));
 vi.mock("@/lib/interface-adapters/controllers/rooms/create-room.controller", () => ({ createRoomController: vi.fn() }));
@@ -70,6 +75,37 @@ describe("room.action", () => {
 
       const res = await getRoom("r1");
       expect(res).toEqual({ status: "success", data: mockRoom, error: null });
+    });
+  });
+
+  describe("getRoomSnapshot", () => {
+    it("returns room, newest messages and the viewer's read position in one call", async () => {
+      const room = { id: "r1", name: "General" } as any;
+      const messages = [{ id: "m1" }, { id: "m2" }] as any;
+      const lastRead = { id: "m1", at: new Date("2026-01-01T00:00:00Z") };
+      vi.mocked(getRoomByIdController).mockResolvedValueOnce(room);
+      vi.mocked(getMessageController).mockResolvedValueOnce(messages);
+      vi.mocked(getLastReadAtController).mockResolvedValueOnce(lastRead);
+
+      const res = await getRoomSnapshot("r1");
+      expect(res).toEqual({ status: "success", data: { room, messages, lastRead }, error: null });
+      expect(getMessageController).toHaveBeenCalledWith("r1", 50);
+      // Read position is always the session user's, never a client-supplied id.
+      expect(getLastReadAtController).toHaveBeenCalledWith(authState.sessionUserId, "r1");
+    });
+
+    it("errors when the room does not exist", async () => {
+      vi.mocked(getRoomByIdController).mockResolvedValueOnce(null as any);
+      vi.mocked(getMessageController).mockResolvedValueOnce([] as any);
+      vi.mocked(getLastReadAtController).mockResolvedValueOnce({ id: null, at: null });
+      expect((await getRoomSnapshot("r1")).status).toBe("error");
+    });
+
+    it("does not let a non-member read a private room", async () => {
+      authState.access = { exists: true, isMember: false, isPublic: false, isDirect: false, ownerId: "owner1" };
+      expect((await getRoomSnapshot("r1")).status).toBe("error");
+      expect(getMessageController).not.toHaveBeenCalled();
+      expect(getLastReadAtController).not.toHaveBeenCalled();
     });
   });
 

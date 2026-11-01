@@ -120,7 +120,11 @@ export class RoomRepository implements IRoomRepository {
           WHERE um."roomId" = r."id"
             AND um."isDeleted" = false
             AND um."userId" <> ${userId}
-            AND um."createdAt" > COALESCE(me."lastReadAt", to_timestamp(0))
+            -- Message.createdAt has microsecond precision (DB now()) but
+            -- lastReadAt is written from a JS Date (milliseconds), so compare
+            -- at millisecond precision or the last read message itself always
+            -- counts as newer than the read position.
+            AND date_trunc('milliseconds', um."createdAt") > COALESCE(me."lastReadAt", to_timestamp(0))
             AND (um."content" LIKE '%<@' || ${userId} || '>%'
                  OR um."content" LIKE '%<@everyone>%')
             -- Only inside a genuinely unread room: the sidebar marks a room read
@@ -129,7 +133,7 @@ export class RoomRepository implements IRoomRepository {
             -- hasUnread is derived from, which keeps the two flags consistent.
             AND lm."id" IS NOT NULL
             AND lm."userId" <> ${userId}
-            AND lm."createdAt" > COALESCE(me."lastReadAt", to_timestamp(0))
+            AND date_trunc('milliseconds', lm."createdAt") > COALESCE(me."lastReadAt", to_timestamp(0))
         ) AS "hasMention"
       FROM "Room" r
       JOIN "RoomParticipant" me

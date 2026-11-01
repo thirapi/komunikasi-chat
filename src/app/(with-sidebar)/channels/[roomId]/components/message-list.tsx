@@ -27,6 +27,7 @@ export function MessageList({
   editingMessageId,
   lastReadMessageId,
   lastReadAt,
+  unreadSettled = true,
   userId,
   onLoadMore,
   hasMore,
@@ -50,6 +51,11 @@ export function MessageList({
   editingMessageId: string | null;
   lastReadMessageId: string | null;
   lastReadAt: Date | null;
+  /**
+   * The read position is authoritative (server snapshot in). Until then the
+   * marker follows the cached data; from then on it is fixed.
+   */
+  unreadSettled?: boolean;
   userId: string;
   onLoadMore: () => void;
   hasMore: boolean;
@@ -66,14 +72,22 @@ export function MessageList({
   // It should not "jump" or "descend" as messages are marked as read.
   const [initialUnreadId, setInitialUnreadId] = useState<string | null>(null);
   const [isUnreadCleared, setIsUnreadCleared] = useState(false);
+  // Decided once the server snapshot is in (`unreadSettled`), then fixed.
+  // Before this freeze, a room with nothing unread kept re-evaluating on every
+  // change, so each message that arrived while the room was open flashed an
+  // "unread" line until the read round-trip caught up. Until it settles the
+  // marker may still be found from the cached data, or appear when the
+  // snapshot brings messages that arrived while the room was closed.
+  const unreadFrozenRef = useRef(false);
 
-  // Initialize the initial unread marker ONLY once on mount or when messages first load
   useEffect(() => {
-    if (initialUnreadId || messages.length === 0) return;
+    if (unreadFrozenRef.current || messages.length === 0) return;
 
-    let firstUnreadIdx = -1;
-    if (lastReadMessageId) {
-      const lastReadIndex = messages.findIndex(msg => msg.id === lastReadMessageId);
+    if (!initialUnreadId) {
+      let firstUnreadIdx = -1;
+      const lastReadIndex = lastReadMessageId
+        ? messages.findIndex(msg => msg.id === lastReadMessageId)
+        : -1;
       if (lastReadIndex !== -1) {
         for (let i = lastReadIndex + 1; i < messages.length; i++) {
           if (messages[i].userId !== userId) {
@@ -81,19 +95,20 @@ export function MessageList({
             break;
           }
         }
+      } else if (lastReadAt) {
+        // Also covers a read anchor that is older than the loaded window.
+        const lastReadTime = new Date(lastReadAt).getTime();
+        firstUnreadIdx = messages.findIndex(msg =>
+          new Date(msg.createdAt).getTime() > lastReadTime &&
+          msg.userId !== userId &&
+          !msg.isOptimistic
+        );
       }
-    } else if (lastReadAt) {
-      const lastReadTime = new Date(lastReadAt).getTime();
-      firstUnreadIdx = messages.findIndex(msg =>
-        new Date(msg.createdAt).getTime() > lastReadTime &&
-        msg.userId !== userId
-      );
+      if (firstUnreadIdx !== -1) setInitialUnreadId(messages[firstUnreadIdx].id);
     }
 
-    if (firstUnreadIdx !== -1) {
-      setInitialUnreadId(messages[firstUnreadIdx].id);
-    }
-  }, [messages, lastReadMessageId, lastReadAt, userId, initialUnreadId]);
+    if (unreadSettled) unreadFrozenRef.current = true;
+  }, [messages, lastReadMessageId, lastReadAt, userId, initialUnreadId, unreadSettled]);
 
   // Monitor if the unread state has been cleared (lastReadAt is newer than our initial unread message)
   useEffect(() => {

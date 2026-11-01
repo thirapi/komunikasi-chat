@@ -5,7 +5,21 @@ import React, { createContext, useContext, useState, useCallback, useMemo, useEf
 interface UnreadRoomState {
   hasUnread: boolean;
   hasMention: boolean;
+  /**
+   * When this state was last decided on this device (ms). A server snapshot
+   * older than that (a router.refresh rendered from data written before the
+   * read reached the DB) must not resurrect a dot the user already cleared, or
+   * hide one for a message that arrived after the snapshot was taken.
+   */
+  at?: number;
 }
+
+type ServerRoomUnread = {
+  id: string;
+  hasUnread: boolean;
+  hasMention: boolean;
+  lastMessageTime?: Date | string | null;
+};
 
 export interface RoomActivity {
   lastMessage: string;
@@ -19,7 +33,7 @@ interface UnreadContextType {
   recordActivity: (roomId: string, lastMessage: string, at: Date | string) => void;
   markAsRead: (roomId: string) => void;
   markAsUnread: (roomId: string, hasMention?: boolean) => void;
-  initializeUnread: (rooms: { id: string; hasUnread: boolean; hasMention: boolean }[]) => void;
+  initializeUnread: (rooms: ServerRoomUnread[]) => void;
 }
 
 const UnreadContext = createContext<UnreadContextType | undefined>(undefined);
@@ -48,16 +62,28 @@ export function UnreadProvider({ children }: { children: React.ReactNode }) {
     document.title = unreadCount > 0 ? `(${unreadCount > 99 ? "99+" : unreadCount}) ${base}` : base;
   }, [unreadCount]);
 
-  const initializeUnread = useCallback((rooms: { id: string; hasUnread: boolean; hasMention: boolean }[]) => {
-    const initial = rooms.reduce((acc, room) => {
-      acc[room.id] = { hasUnread: room.hasUnread, hasMention: room.hasMention };
-      return acc;
-    }, {} as Record<string, UnreadRoomState>);
-    setUnreadRooms(initial);
+  const initializeUnread = useCallback((rooms: ServerRoomUnread[]) => {
+    setUnreadRooms((prev) => {
+      const next: Record<string, UnreadRoomState> = {};
+      for (const room of rooms) {
+        const local = prev[room.id];
+        const serverLatest = room.lastMessageTime ? new Date(room.lastMessageTime).getTime() : 0;
+        // Keep what this device decided unless the server has seen a message
+        // newer than that decision.
+        next[room.id] =
+          local?.at !== undefined && serverLatest <= local.at
+            ? local
+            : { hasUnread: room.hasUnread, hasMention: room.hasMention };
+      }
+      return next;
+    });
   }, []);
 
   const markAsRead = useCallback((roomId: string) => {
-    setUnreadRooms((prev) => ({ ...prev, [roomId]: { hasUnread: false, hasMention: false } }));
+    setUnreadRooms((prev) => ({
+      ...prev,
+      [roomId]: { hasUnread: false, hasMention: false, at: Date.now() },
+    }));
   }, []);
 
   const markAsUnread = useCallback((roomId: string, hasMention = false) => {
@@ -67,7 +93,10 @@ export function UnreadProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         [roomId]: {
           hasUnread: true,
-          hasMention: hasMention || current.hasMention
+          hasMention: hasMention || current.hasMention,
+          // Receive time on this device's clock, same as markAsRead, so the
+          // two compare cleanly regardless of server clock skew.
+          at: Date.now(),
         }
       };
     });

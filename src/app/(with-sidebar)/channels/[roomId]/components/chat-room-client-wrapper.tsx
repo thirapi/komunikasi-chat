@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getUserSession, sidaBarUserInfo } from "@/app/auth.action";
-import { getLastReadAt, getMessage } from "../messages.action";
-import { getRoom } from "../room.action";
+import { getRoomSnapshot } from "../room.action";
 import { ChatRoom } from "./chat-room";
 import { clientChatCache } from "@/lib/infrastructure/cache/client-cache";
 import { Warning } from "@phosphor-icons/react/dist/ssr";
@@ -36,6 +35,8 @@ type RoomState = {
   lastReadMessageId: string | null;
   lastReadAt: Date | null;
   user: CurrentUser;
+  /** True once the data comes from the server rather than the local cache. */
+  isFresh: boolean;
 };
 
 function fromMemory(roomId: string, user: CurrentUser | null): RoomState | null {
@@ -49,6 +50,7 @@ function fromMemory(roomId: string, user: CurrentUser | null): RoomState | null 
     lastReadMessageId: lastRead.id,
     lastReadAt: lastRead.at,
     user: user ?? { id: "", name: "", username: "", avatar: "" },
+    isFresh: false,
   };
 }
 
@@ -94,27 +96,23 @@ export function ChatRoomClientWrapper({ roomId }: { roomId: string }) {
               lastReadMessageId: cachedLastRead?.id ?? null,
               lastReadAt: cachedLastRead?.at ?? null,
               user,
+              isFresh: false,
             });
           }
         }
 
-        // 2. Revalidate over the network in the background.
-        const roomResponse = await getRoom(roomId);
+        // 2. Revalidate over the network in the background, in one request.
+        const snapshot = await getRoomSnapshot(roomId);
         if (!isMounted) return;
-        if (roomResponse.status !== "success" || !roomResponse.data) {
+        if (snapshot.status !== "success" || !snapshot.data) {
           if (!clientChatCache.getRoomSync(roomId)) setError("Gagal memuat room");
           return;
         }
-        const [messagesResponse, lastReadResponse] = await Promise.all([
-          getMessage(roomId, 50),
-          getLastReadAt(user.id, roomId),
-        ]);
-        if (!isMounted) return;
 
-        const fetchedMessages =
-          (messagesResponse.status === "success" ? messagesResponse.data : []) ?? [];
-        const fetchedLastRead = lastReadResponse.status === "success" ? lastReadResponse.data : null;
+        const fetchedMessages = snapshot.data.messages;
+        const fetchedLastRead = snapshot.data.lastRead;
         const lastReadAt = fetchedLastRead?.at ? new Date(fetchedLastRead.at) : null;
+        const roomResponse = { data: snapshot.data.room };
 
         void clientChatCache.setRoom(roomId, roomResponse.data);
         void clientChatCache.setMessages(roomId, fetchedMessages);
@@ -127,6 +125,7 @@ export function ChatRoomClientWrapper({ roomId }: { roomId: string }) {
           lastReadMessageId: fetchedLastRead?.id || null,
           lastReadAt,
           user,
+          isFresh: true,
         });
       } catch (e) {
         console.error("Initialization error:", e);
@@ -164,6 +163,7 @@ export function ChatRoomClientWrapper({ roomId }: { roomId: string }) {
       lastReadMessageId={data.lastReadMessageId}
       lastReadAt={data.lastReadAt}
       user={data.user}
+      isFresh={data.isFresh}
     />
   );
 }

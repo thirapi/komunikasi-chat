@@ -11,6 +11,9 @@ import { ServerResponse } from "@/lib/entities/models/response.model";
 import { RoomWithParticipantsDTO } from "@/lib/entities/models/room.model";
 import { createRoomController } from "@/lib/interface-adapters/controllers/rooms/create-room.controller";
 import { getRoomByIdController } from "@/lib/interface-adapters/controllers/rooms/get-room-by-id.controller";
+import { getMessageController } from "@/lib/interface-adapters/controllers/messages/get-message.controller";
+import { getLastReadAtController } from "@/lib/interface-adapters/controllers/rooms/get-last-read-at.controller";
+import { MessageWithUserDTO } from "@/lib/entities/models/message.model";
 import { getRoomByUserIdController } from "@/lib/interface-adapters/controllers/rooms/get-room-by-user-id.controller";
 import { getSidebarDataController } from "@/lib/interface-adapters/controllers/rooms/get-sidebar-data.controller";
 import { SidebarRoomDTO } from "@/lib/entities/models/room.model";
@@ -67,6 +70,47 @@ export const getRoom = async (
         type: err.name,
         meta: err.fields,
       },
+    };
+  }
+};
+
+/**
+ * Everything a room needs to open — metadata, the newest page of messages and
+ * the viewer's read position — in one request.
+ *
+ * Next.js runs server actions from one client one at a time, so opening a room
+ * with getRoom → getMessage → getLastReadAt cost three sequential round trips
+ * (more if a read-state update was queued in front of them). That gap is what
+ * made a room open on its stale cached view and only show new messages a beat
+ * later. One action, with the three reads run in parallel on the server.
+ */
+export const getRoomSnapshot = async (
+  roomId: string
+): Promise<
+  ServerResponse<{
+    room: RoomWithParticipantsDTO;
+    messages: MessageWithUserDTO[];
+    lastRead: { id: string | null; at: Date | null };
+  } | null>
+> => {
+  try {
+    const viewerId = await requireReader();
+    await assertCanReadRoom(roomId, viewerId);
+    const [room, messages, lastRead] = await Promise.all([
+      getRoomByIdController(roomId),
+      getMessageController(roomId, 50),
+      getLastReadAtController(viewerId, roomId),
+    ]);
+    if (!room) {
+      return { status: "error", data: null, error: { message: "Room tidak ditemukan", type: "NotFound" } };
+    }
+    return { status: "success", data: { room, messages: messages ?? [], lastRead }, error: null };
+  } catch (err: any) {
+    console.error("Action Error:", err);
+    return {
+      status: "error",
+      data: null,
+      error: { message: err.message, type: err.name, meta: err.fields },
     };
   }
 };

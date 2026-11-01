@@ -182,6 +182,7 @@ export function AppSidebar({
         id: r.id,
         hasUnread: r.hasUnread,
         hasMention: (r as any).hasMention,
+        lastMessageTime: r.lastMessageTime,
       }))
     );
   }, [groupRooms, directRooms, initializeUnread]);

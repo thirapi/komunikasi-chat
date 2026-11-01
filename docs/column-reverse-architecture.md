@@ -21,3 +21,7 @@ Meskipun `flex-col-reverse` menangani pertumbuhan konten di atas dengan sangat b
 ## Konvensi yang Harus Dijaga
 **DILARANG membalik ulang iterasi di DOM**. 
 Setiap barisan *Component* harus disusun ke dalam koleksi kronologis normal lalu dikunci menggunakan perputaran utuh sebelum diproduksi ulang. Hal ini demi merekayasa pelukisan CSS tetapi tetap menetapkan logika hari dan pemisah unread (*Date And Unread Separators*) menyatu solid dan bermakna normal di balik layar.
+
+## Stick-to-Bottom (pengecualian kecil)
+`flex-col-reverse` hanya menahan view di dasar selama `scrollTop` tepat `0`. Bila meleset beberapa piksel (pembulatan DPI, smooth scroll yang berhenti sedikit sebelum dasar, composer membesar, gambar selesai dimuat), *scroll anchoring* browser menahan konten lama dan pesan baru jatuh di bawah layar — padahal bottom observer sudah menandainya terbaca.
+`hooks/use-auto-scroll.ts` karena itu melacak apakah pembaca sedang "mengikuti dasar" (≤32px dari dasar, dari event scroll) dan, hanya dalam kondisi itu, menyetel `scrollTop = 0` di layout effect (sebelum paint) saat pesan bertambah, media selesai dimuat, atau viewport berubah ukuran. Tidak ada pengukuran tinggi; pembaca yang sedang scroll ke atas tidak pernah ditarik turun, kecuali saat ia sendiri mengirim pesan.

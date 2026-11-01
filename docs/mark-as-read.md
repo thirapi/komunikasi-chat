@@ -45,6 +45,17 @@ Untuk menjaga konsistensi antara tampilan chat dan sidebar:
 - Pesan dari room yang belum ada di sidebar (DM baru, baru diundang) memicu `router.refresh()` sekali per room.
 - Judul tab menampilkan jumlah room unread: `(3) Komunikasi`.
 
+### 7. Batching read, separator, dan sinkronisasi sidebar
+- **Target terjauh menang**: `markAsReadApi` di `chat-room.tsx` mengumpulkan permintaan selama ~400ms dan menulis pesan **paling bawah** yang dilaporkan (bukan argumen panggilan terakhir seperti debounce lama), dan tidak bisa "kelaparan" oleh callback observer yang terus berdatangan. Antrian yang tersisa ditulis saat room ditutup.
+- **Sidebar hanya bersih bila sampai pesan terbaru**: titik unread di sidebar dihapus saat pembacaan mencapai pesan nyata terakhir, termasuk bila read position sudah tersimpan sebelumnya (misal dibaca di perangkat lain).
+- **Separator diputuskan sekali**: `MessageList` boleh menentukan separator dari cache, lalu dikunci setelah snapshot server masuk (`unreadSettled`, fallback 4 detik). Pesan yang datang saat room terbuka tidak lagi memunculkan separator sesaat.
+- **Merge snapshot server**: `UnreadProvider.initializeUnread` (dipanggil ulang setiap `router.refresh`) tidak menimpa keputusan lokal yang lebih baru dari pesan terakhir di snapshot (`at` per room), sehingga titik yang sudah dibaca tidak muncul kembali karena data server yang tertinggal.
+- **Presisi timestamp**: `Message.createdAt` berpresisi mikrodetik (`now()` di DB) sedangkan `lastReadAt` ditulis dari JS (milidetik). Query sidebar membandingkan dengan `date_trunc('milliseconds', ...)`.
+
+### 8. Membuka room: satu request, cache ikut terisi realtime
+- `getRoomSnapshot` (room.action.ts) mengambil room, 50 pesan terbaru, dan read position dalam **satu** server action (server action Next.js antre satu per satu, sebelumnya 3 round trip berurutan).
+- `RealtimeNotificationListener` menulis pesan dari room lain ke cache memori (`clientChatCache.appendLive`), sehingga room yang dibuka dari sidebar langsung menampilkan pesan barunya di frame pertama.
+
 ## Aturan Pengembangan (Guardrails)
 1. **Prioritas Kebenaran (Timestamp-First)**: Selalu gunakan `lastReadAt` (timestamp) sebagai *Primary Source of Truth*. Update hanya dilakukan jika timestamp baru **lebih besar** (lebih baru) dari yang tersimpan. Hal ini mencegah *stale data* dari server menimpa update lokal yang cepat.
 2. **Auto-Mark at Bottom**: Jika user berada di dasar chat (`isAtBottom: true`), setiap pesan baru yang masuk (via Pusher) harus otomatis ditandai sebagai dibaca tanpa menunggu interaksi scroll tambahan.

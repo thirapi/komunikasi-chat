@@ -6,7 +6,9 @@ export function useScrollToInitial(
   unreadRef: React.RefObject<HTMLDivElement | null>,
   bottomRef: React.RefObject<HTMLDivElement | null>,
   /** When true the room restored a saved position, so leave scroll alone. */
-  skipRef?: React.RefObject<boolean>
+  skipRef?: React.RefObject<boolean>,
+  /** Cleared when we scroll up to the marker, so nothing re-pins to the bottom. */
+  stickRef?: React.RefObject<boolean>
 ) {
   const hasScrolled = useRef(false);
 
@@ -24,6 +26,10 @@ export function useScrollToInitial(
             behavior: "auto",
             block: "center",
           });
+          // Instant scroll, so the position is final: still following the
+          // bottom only if the marker sat close enough to it.
+          const viewport = unreadRef.current?.parentElement;
+          if (stickRef && viewport) stickRef.current = Math.abs(viewport.scrollTop) <= 32;
         }
         // CSS flex-col-reverse secara inheren memulai scroll dari bawah.
         // Jika tidak ada pesan Unread, kita membiarkan browser istirahat tanpa manipulasi JS (0 flicker!).
