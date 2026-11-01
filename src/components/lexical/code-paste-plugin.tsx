@@ -11,13 +11,15 @@ import {
   PASTE_COMMAND,
 } from "lexical";
 import { toast } from "sonner";
-import { guessLanguage, languageFromVsCode, looksLikeCode } from "@/lib/chat/code-detect";
+import { codeFromHtml, guessLanguage, languageFromVsCode, looksLikeCode } from "@/lib/chat/code-detect";
 
 /**
  * Paste code → ``` fenced block, automatically.
  *
  * Triggers when the clipboard comes from VS Code (it adds `vscode-editor-data`,
- * which also tells us the language) or when the text clearly looks like code.
+ * which also tells us the language), when its HTML is a <pre>/<code> block
+ * (GitHub, StackOverflow, docs, JetBrains IDEs), or when the text clearly
+ * looks like code.
  * The fence is inserted as plain markdown, consistent with the editor's
  * "markdown is always text" model, so Ctrl/⌘+Z restores the raw paste.
  * Skipped when the caret is already inside a fence or the text has its own.
@@ -36,9 +38,13 @@ export function CodePastePlugin() {
         const text = data.getData("text/plain");
         if (!text || text.includes("```")) return false;
 
-        const vscodeLang = languageFromVsCode(data.getData("vscode-editor-data"));
         const multiLine = /\n/.test(text.trim());
-        const isCode = vscodeLang !== null ? multiLine : looksLikeCode(text);
+        // Explicit sources say "this is code"; they still need several lines,
+        // a single line stays inline text.
+        const vscodeLang = languageFromVsCode(data.getData("vscode-editor-data"));
+        const htmlLang = vscodeLang === null ? codeFromHtml(data.getData("text/html")) : null;
+        const sourceLang = vscodeLang ?? htmlLang;
+        const isCode = sourceLang !== null ? multiLine : looksLikeCode(text);
         if (!isCode) return false;
 
         // Already inside an open fence? Then paste as-is.
@@ -48,7 +54,7 @@ export function CodePastePlugin() {
         });
         if (insideFence) return false;
 
-        const lang = vscodeLang || guessLanguage(text);
+        const lang = sourceLang || guessLanguage(text);
         const body = text.replace(/\r\n/g, "\n").replace(/\n+$/, "");
 
         event.preventDefault();

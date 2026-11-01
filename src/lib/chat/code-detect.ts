@@ -8,8 +8,14 @@
 
 const KEYWORD_LINE =
   /^\s*(import|export|from|const|let|var|function|async|await|return|if|else|elif|for|while|switch|case|try|catch|finally|class|interface|type|enum|def|fn|func|pub|use|package|public|private|protected|static|#include|#define|SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|WITH|echo|sudo|npm|pnpm|yarn|git|docker|cd|ls|curl)\b/;
-const CODE_END = /[;{}()[\],:]\s*$|=>\s*$/;
-const CODE_TOKENS = /(=>|===|!==|::|->|\+\+|&&|\|\||\/\/|\/\*|<\/\w+>|\w+\(.*\)|\{\s*$|^\s*[}\])])/;
+// Line endings that mean code. Deliberately not ")" (emoticons like ":)" and
+// "(besok)" asides end chat lines all the time), not "," (prose) and not a bare
+// ":" (prose like "cek ini:"); calls and keys are caught by the patterns below.
+const CODE_END = /[;{}[\]]\s*$|=>\s*$/;
+const CODE_TOKENS = /(=>|===|!==|::|->|\+\+|&&|\|\||\/\/|\/\*|<\/\w+>|\w\(.*\)|\{\s*$|^\s*[}\])])/;
+/** A lone key opening a block: "scripts:", "def f():" is caught by the call pattern. */
+const BLOCK_KEY = /^\s*[\w.-]+:\s*$/;
+const URL = /\bhttps?:\/\/\S+/g;
 
 export function looksLikeCode(text: string): boolean {
   const trimmed = text.replace(/\s+$/, "");
@@ -19,14 +25,22 @@ export function looksLikeCode(text: string): boolean {
 
   let signals = 0;
   let prose = 0;
-  for (const line of lines) {
+  let counted = 0;
+  for (const raw of lines) {
+    // URLs ("//", ":") are not code signals; a line that is only a link is
+    // neutral and does not count either way.
+    const line = raw.replace(URL, "").replace(/\s+$/, "");
+    if (line.trim().length === 0) continue;
+    counted++;
     const isIndented = /^(\t| {2,})\S/.test(line);
-    const isCodey = KEYWORD_LINE.test(line) || CODE_END.test(line) || CODE_TOKENS.test(line);
+    const isCodey =
+      KEYWORD_LINE.test(line) || CODE_END.test(line) || CODE_TOKENS.test(line) || BLOCK_KEY.test(line);
     if (isCodey || isIndented) signals++;
     // Sentences: several words and ending in sentence punctuation.
     if (/^[A-Za-zÀ-ÿ"'(]/.test(line.trim()) && /[.!?]["')]?\s*$/.test(line) && line.trim().split(/\s+/).length >= 5) prose++;
   }
-  return signals >= 2 && signals / lines.length >= 0.5 && prose / lines.length < 0.4;
+  if (counted < 2) return false;
+  return signals >= 2 && signals / counted >= 0.5 && prose / counted < 0.4;
 }
 
 function isJson(text: string) {
@@ -48,6 +62,35 @@ const VSCODE_MODE_MAP: Record<string, string> = {
   shellscript: "bash",
   plaintext: "",
 };
+
+/**
+ * Code copied from a web page or an IDE that puts HTML on the clipboard
+ * (GitHub, StackOverflow, docs sites, JetBrains IDEs) arrives inside <pre> or
+ * <code>, usually with the language in a class. That is a far surer signal
+ * than guessing from the text. Returns null when the HTML is not a code block,
+ * otherwise the language ("" when it does not say).
+ */
+export function codeFromHtml(html: string | null | undefined): string | null {
+  if (!html) return null;
+  // The whole selection has to be code: a <code> span inside a paragraph of
+  // prose (inline code in an article) does not count.
+  const body = html
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/^[\s\S]*?<body[^>]*>/i, "")
+    .replace(/<\/body>[\s\S]*$/i, "")
+    .replace(/<meta[^>]*>/gi, "")
+    .trim();
+  const isPre = /^(<(div|span)[^>]*>\s*)*<pre[\s>]/i.test(body);
+  const isCodeOnly = /^(<(div|span)[^>]*>\s*)*<code[\s>][\s\S]*<\/code>(\s*<\/(div|span)>)*$/i.test(body);
+  // GitHub file view: a table of lines with this class.
+  const isGitHubBlob = /class="[^"]*\bblob-code\b/.test(body);
+  if (!isPre && !isCodeOnly && !isGitHubBlob) return null;
+  const lang =
+    body.match(/class="[^"]*\b(?:language|lang)-([\w+#-]+)/i)?.[1] ??
+    body.match(/class="[^"]*\bhighlight-source-([\w+#-]+)/i)?.[1] ??
+    "";
+  return VSCODE_MODE_MAP[lang.toLowerCase()] ?? lang.toLowerCase();
+}
 
 /** Language from VS Code's clipboard metadata, if the paste came from VS Code. */
 export function languageFromVsCode(raw: string | null | undefined): string | null {
