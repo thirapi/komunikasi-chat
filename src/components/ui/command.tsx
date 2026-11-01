@@ -31,7 +31,7 @@ function Command({
 
 function CommandDialog({
   title = "Command Palette",
-  description = "MagnifyingGlass for a command to run...",
+  description = "Cari perintah untuk dijalankan",
   children,
   ...props
 }: React.ComponentProps<typeof Dialog> & {
@@ -62,7 +62,7 @@ function CommandInput({
       data-slot="command-input-wrapper"
       className="flex h-9 items-center gap-2 border-b px-3"
     >
-      <MagnifyingGlass weight="duotone" className="size-4 shrink-0 opacity-50" />
+      <MagnifyingGlass className="size-4 shrink-0 text-muted-foreground" />
       <CommandPrimitive.Input
         data-slot="command-input"
         className={cn(

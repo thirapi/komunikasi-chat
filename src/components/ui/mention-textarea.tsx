@@ -21,6 +21,7 @@ import { MentionNode, $createMentionNode } from "@/components/lexical/mention-no
 import { MentionPlugin } from "@/components/lexical/mention-plugin";
 import { FloatingToolbarPlugin } from "@/components/lexical/floating-toolbar-plugin";
 import { MarkdownDecoratorPlugin } from "@/components/lexical/markdown-decorator-plugin";
+import { CodePastePlugin } from "@/components/lexical/code-paste-plugin";
 import { RoomWithParticipantsDTO } from "@/lib/entities/models/room.model";
 import { cn } from "@/lib/utils";
 
@@ -31,7 +32,7 @@ const editorTheme = {
         bold: "font-bold",
         italic: "italic",
         strikethrough: "line-through",
-        code: "mx-0.5 break-words rounded-xs bg-[#F8F8F8] dark:bg-[#2D2D2D] px-[5px] py-[1.5px] font-mono text-[12px] font-medium text-[#E01E5A] dark:text-[#FF7B72]",
+        code: "break-words rounded-[4px] border border-border/70 bg-muted/60 px-1 py-px font-mono text-[0.85em] text-foreground",
         underline: "underline",
     },
 };
@@ -381,6 +382,7 @@ export function MentionTextarea({
                     <OnChangePlugin onChange={handleChange} />
                     <HistoryPlugin />
                     <MarkdownDecoratorPlugin />
+                    <CodePastePlugin />
                     <FloatingToolbarPlugin />
                     <DraftPersistencePlugin draftKey={draftKey} value={value} />
                     <SubmitOnEnterPlugin onSubmit={onSubmit} />

@@ -1,4 +1,5 @@
 // src/lib/infrastructure/services/pusher.service.ts
+import { userChannel } from "@/lib/pusher/channels";
 import Pusher from "pusher";
 import { IPusherService } from "@/lib/application/services/pusher.service.interface";
 
@@ -28,9 +29,13 @@ export class PusherService implements IPusherService {
     });
   }
 
+  async authorizePrivate(socketId: string, channelName: string): Promise<any> {
+    return pusher.authorizeChannel(socketId, channelName);
+  }
+
   async triggerToUsers(userIds: string[], event: string, data: any) {
     await Promise.all(
-      userIds.map((id) => pusher.trigger(`user-${id}`, event, data))
+      userIds.map((id) => pusher.trigger(userChannel(id), event, data))
     );
   }
 }

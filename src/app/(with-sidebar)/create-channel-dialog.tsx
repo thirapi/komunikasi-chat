@@ -75,86 +75,74 @@ export function CreateChannelDialog({
             }
         }}
     >
-      <DialogContent className="sm:max-w-[425px] rounded-2xl border-border/40">
-        <DialogHeader className="space-y-1.5">
-          <DialogTitle className="text-lg font-semibold tracking-tight">
-            buat channel baru
-          </DialogTitle>
-          <DialogDescription className="text-sm">
-            channel adalah tempat anggota berkomunikasi. gunakan nama yang mencerminkan topik obrolan.
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Buat channel</DialogTitle>
+          <DialogDescription>
+            Channel adalah ruang obrolan untuk satu tim atau topik.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-5 py-4">
-          <div className="grid gap-2">
-            <Label htmlFor="name" className="text-xs font-medium text-muted-foreground ml-1">Nama channel</Label>
-            <Input
-              id="name"
-              placeholder="misal: pengumuman"
-              value={name}
-              onChange={(e) => setName(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
-              className="h-10 rounded-xl bg-muted/30 border-border/50 focus-visible:ring-primary/20"
-              disabled={isSubmitting}
-            />
-            <p className="text-[10px] text-muted-foreground ml-1">
-              hanya huruf kecil, angka, dan tanda hubung.
-            </p>
+        <div className="grid gap-4">
+          <div className="grid gap-1.5">
+            <Label htmlFor="name" className="text-xs">Nama</Label>
+            <div className="relative">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">#</span>
+              <Input
+                id="name"
+                placeholder="pengumuman"
+                value={name}
+                onChange={(e) => setName(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+                className="pl-7"
+                disabled={isSubmitting}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && name.trim() && !isSubmitting) handleCreate();
+                }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">Huruf kecil, angka, dan tanda hubung.</p>
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="description" className="text-xs font-medium text-muted-foreground ml-1">Deskripsi (opsional)</Label>
+          <div className="grid gap-1.5">
+            <Label htmlFor="description" className="text-xs">
+              Deskripsi <span className="font-normal text-muted-foreground">(opsional)</span>
+            </Label>
             <Textarea
               id="description"
-              placeholder="jelaskan tentang apa channel ini..."
+              placeholder="Untuk apa channel ini?"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               disabled={isSubmitting}
-              className="resize-none rounded-xl bg-muted/30 border-border/50 focus-visible:ring-primary/20 min-h-[100px]"
+              className="resize-none min-h-[80px]"
             />
           </div>
 
-          <div className="flex items-center justify-between rounded-xl border border-border/50 p-4 bg-muted/10">
-            <div className="space-y-1">
-              <Label className="text-sm font-medium">
-                {isPublic ? "channel publik" : "channel privat"}
-              </Label>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                {isPublic 
-                  ? "semua orang bisa menemukan dan bergabung." 
-                  : "hanya orang yang diundang yang bisa melihat."}
-              </p>
-            </div>
+          <label htmlFor="create-channel-public" className="flex cursor-pointer items-center justify-between gap-4 rounded-md border border-border px-3 py-2.5">
+            <span>
+              <span className="block text-sm font-medium">Channel publik</span>
+              <span className="block text-xs text-muted-foreground">
+                {isPublic
+                  ? "Siapa pun bisa menemukan dan bergabung."
+                  : "Hanya orang yang diundang yang bisa bergabung."}
+              </span>
+            </span>
             <Switch
+              id="create-channel-public"
               checked={isPublic}
               onCheckedChange={setIsPublic}
               disabled={isSubmitting}
-              className="data-[state=checked]:bg-primary"
             />
-          </div>
+          </label>
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button 
-            variant="ghost" 
-            onClick={() => onOpenChange(false)} 
-            disabled={isSubmitting}
-            className="rounded-xl hover:bg-muted"
-          >
-            batal
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+            Batal
           </Button>
-          <Button 
-            onClick={handleCreate} 
-            disabled={isSubmitting}
-            className="rounded-xl shadow-none font-medium px-6"
-          >
-            {isSubmitting ? (
-              <>
-                <CircleNotch weight="duotone" className="mr-2 h-4 w-4 animate-spin" />
-                memproses...
-              </>
-            ) : (
-              "buat channel"
-            )}
+          <Button onClick={handleCreate} disabled={isSubmitting || !name.trim()}>
+            {isSubmitting && <CircleNotch className="mr-1.5 h-4 w-4 animate-spin" />}
+            Buat channel
           </Button>
         </DialogFooter>
       </DialogContent>

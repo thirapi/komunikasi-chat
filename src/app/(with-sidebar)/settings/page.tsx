@@ -4,8 +4,8 @@ import SettingsView from "./settings-view";
 import { getInitials } from "@/lib/get-initials";
 
 export const metadata: Metadata = {
-    title: "Settings - Komunikasi",
-    description: "Manage your account settings.",
+    title: "Pengaturan - Komunikasi",
+    description: "Atur akun Komunikasi kamu.",
 };
 
 export default async function SettingsPage() {

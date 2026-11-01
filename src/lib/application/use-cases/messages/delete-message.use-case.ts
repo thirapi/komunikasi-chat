@@ -1,3 +1,4 @@
+import { roomChannel } from "@/lib/pusher/channels";
 import { IMessageRepository } from "../../repositories/message.repository.interface";
 import { IRoomRepository } from "../../repositories/room.repository.interface";
 import { IPusherService } from "../../services/pusher.service.interface";
@@ -25,7 +26,7 @@ export class DeleteMessageUseCase {
     await this.messageRepository.deleteMessage(messageId);
 
     // Notify room channel for real-time removal in ChatRoom
-    await this.pusherService.trigger(`chat-${message.roomId}`, "message-deleted", {
+    await this.pusherService.trigger(roomChannel(message.roomId), "message-deleted", {
       messageId,
       roomId: message.roomId,
     });

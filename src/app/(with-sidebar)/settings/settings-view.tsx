@@ -5,38 +5,25 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { CaretLeft, Camera, CircleNotch, Sparkle, Key, WarningCircle, User, Shield, CaretRight, Info } from "@phosphor-icons/react/dist/ssr";
+import { CaretLeft, CaretRight, Camera, CircleNotch, User, Key, PaintBrush, Info, Desktop, Sun, Moon, Check } from "@phosphor-icons/react/dist/ssr";
 import { updateUserAction, changePasswordAction } from "../user.action";
 import { uploadFileAction } from "../channels/[roomId]/messages.action";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useTheme } from "next-themes";
 import { APP_VERSION, APP_VERSION_CODE } from "@/lib/version";
 import { isNative, platform } from "@/lib/native/platform";
 
 const sections = [
-    { id: "profile", label: "Profile", icon: User },
-    { id: "security", label: "Security", icon: Shield },
-    { id: "appearance", label: "Appearance", icon: PaintbrushIcon },
-    { id: "about", label: "About", icon: Info },
-];
+    { id: "profile", label: "Profil", description: "Nama, username, foto, bio", icon: User },
+    { id: "security", label: "Keamanan", description: "Ganti password", icon: Key },
+    { id: "appearance", label: "Tampilan", description: "Tema terang atau gelap", icon: PaintBrush },
+    { id: "about", label: "Tentang", description: "Versi aplikasi", icon: Info },
+] as const;
 
-function PaintbrushIcon(props: any) {
-    return (
-        <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m14.622 17.897-3.458-3.458 3.458-3.458 3.458 3.458Z" />
-            <path d="M18.396 15.642 20 17.246a1 1 0 0 1 0 1.414l-1.417 1.417a1 1 0 0 1-1.414 0l-1.604-1.604" />
-            <path d="M8 11.414 3.414 6.828a2 2 0 0 1 0-2.828l1.414-1.414a2 2 0 0 1 2.828 0L12.242 7.172" />
-            <path d="m2 21 5-5" />
-            <path d="M5 11h2" />
-            <path d="M11 5v2" />
-            <path d="M13 13h2" />
-            <path d="M11 11v2" />
-        </svg>
-    );
-}
+type SectionId = (typeof sections)[number]["id"];
 
 interface SettingsViewProps {
     user: {
@@ -64,7 +51,7 @@ function ProfileForm({ user }: { user: NonNullable<SettingsViewProps["user"]> })
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     const handleUpdate = async () => {
-        if (!username.trim()) return toast.error("Username cannot be empty");
+        if (!username.trim()) return toast.error("Username tidak boleh kosong");
         setIsUpdating(true);
         try {
             const response = await updateUserAction(user.id, {
@@ -74,8 +61,8 @@ function ProfileForm({ user }: { user: NonNullable<SettingsViewProps["user"]> })
                 bio: bio.trim() || null,
                 customStatus: customStatus.trim() || null,
             });
-            if (response.status === "success") toast.success("Profile updated!");
-            else toast.error(response.error?.message || "Failed to update profile");
+            if (response.status === "success") toast.success("Profil disimpan");
+            else toast.error(response.error?.message || "Gagal menyimpan profil");
         } finally {
             setIsUpdating(false);
         }
@@ -84,7 +71,7 @@ function ProfileForm({ user }: { user: NonNullable<SettingsViewProps["user"]> })
     const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        if (file.size > 2 * 1024 * 1024) return toast.error("File size max 2MB");
+        if (file.size > 2 * 1024 * 1024) return toast.error("Ukuran file maksimal 2 MB");
         setIsUploading(true);
         try {
             const formData = new FormData();
@@ -92,8 +79,8 @@ function ProfileForm({ user }: { user: NonNullable<SettingsViewProps["user"]> })
             const response = await uploadFileAction(formData, "avatars");
             if (response.status === "success" && response.data) {
                 setAvatar(response.data.fileurl);
-                toast.success("Avatar uploaded!");
-            } else toast.error(response.error?.message || "Upload failed");
+                toast.success("Foto diunggah. Simpan untuk menerapkan.");
+            } else toast.error(response.error?.message || "Gagal mengunggah");
         } finally {
             setIsUploading(false);
         }
@@ -103,59 +90,91 @@ function ProfileForm({ user }: { user: NonNullable<SettingsViewProps["user"]> })
         bio !== (user.bio || "") || customStatus !== (user.customStatus || "");
 
     return (
-        <div className="space-y-5">
+        <div className="space-y-6">
             <div className="flex items-center gap-4">
-                <div className="relative group">
-                    <UserAvatar src={avatar} className="h-16 w-16 rounded-full ring-2 ring-border" />
-                    <button onClick={() => fileInputRef.current?.click()} disabled={isUploading}
-                        className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center rounded-full transition-opacity">
-                        {isUploading ? <CircleNotch className="h-5 w-5 animate-spin text-white" /> : <Camera className="h-5 w-5 text-white" />}
-                    </button>
-                    <input type="file" ref={fileInputRef} onChange={handleAvatarUpload} className="hidden" accept="image/*" />
+                <UserAvatar src={avatar} alt={displayName || user.name} className="size-16 rounded-full" />
+                <div className="flex flex-col items-start gap-1">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploading}
+                    >
+                        {isUploading ? <CircleNotch className="animate-spin" /> : <Camera />}
+                        Ganti foto
+                    </Button>
+                    <p className="text-xs text-muted-foreground">JPG, PNG, atau GIF. Maks 2 MB.</p>
                 </div>
-                <div>
-                    <p className="font-bold">{displayName || user.name}</p>
-                    <p className="text-sm text-muted-foreground">@{username}</p>
-                </div>
+                <input type="file" ref={fileInputRef} onChange={handleAvatarUpload} className="hidden" accept="image/*" />
             </div>
 
-            <div className="grid gap-4">
-                <div className="grid gap-1.5">
-                    <Label className="text-sm font-medium">Display Name</Label>
-                    <Input value={displayName} onChange={e => setDisplayName(e.target.value)} className="h-10" />
-                </div>
-                <div className="grid gap-1.5">
-                    <Label className="text-sm font-medium">Username</Label>
+            <div className="grid gap-5">
+                <Field label="Nama tampilan" htmlFor="displayName">
+                    <Input id="displayName" value={displayName} onChange={e => setDisplayName(e.target.value)} />
+                </Field>
+                <Field
+                    label="Username"
+                    htmlFor="username"
+                    hint="Mengganti username juga mengganti tautan profilmu."
+                >
                     <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">@</span>
-                        <Input value={username} onChange={e => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))} className="h-10 pl-7" />
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">@</span>
+                        <Input
+                            id="username"
+                            value={username}
+                            onChange={e => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+                            className="pl-7"
+                        />
                     </div>
-                </div>
-                <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50">
-                    <WarningCircle weight="duotone" className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-                    <p className="text-xs text-muted-foreground">Changing your username changes your profile link.</p>
-                </div>
-                <div className="grid gap-1.5">
-                    <Label className="text-sm font-medium flex items-center gap-1.5">
-                        Custom Status <Sparkle weight="duotone" className="h-3.5 w-3.5 text-primary" />
-                    </Label>
-                    <Input value={customStatus} onChange={e => setCustomStatus(e.target.value)} className="h-10" placeholder="What&apos;s happening?" maxLength={100} />
-                </div>
-                <div className="grid gap-1.5">
-                    <Label className="text-sm font-medium">Bio</Label>
-                    <textarea value={bio} onChange={e => setBio(e.target.value)}
-                        className="flex min-h-[72px] w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus:ring-1 focus:ring-primary resize-none"
-                        placeholder="Tell about yourself..." maxLength={250} />
-                    <p className="text-xs text-muted-foreground text-right">{bio.length}/250</p>
-                </div>
+                </Field>
+                <Field label="Status" htmlFor="customStatus">
+                    <Input
+                        id="customStatus"
+                        value={customStatus}
+                        onChange={e => setCustomStatus(e.target.value)}
+                        placeholder="Sedang apa?"
+                        maxLength={100}
+                    />
+                </Field>
+                <Field label="Bio" htmlFor="bio" hint={<span className="tabular-nums">{bio.length}/250</span>}>
+                    <textarea
+                        id="bio"
+                        value={bio}
+                        onChange={e => setBio(e.target.value)}
+                        className="flex min-h-[88px] w-full resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+                        placeholder="Ceritakan sedikit tentang dirimu"
+                        maxLength={250}
+                    />
+                </Field>
             </div>
 
-            {isDirty && (
-                <Button onClick={handleUpdate} disabled={isUpdating} className="w-full font-bold h-11">
-                    {isUpdating && <CircleNotch className="mr-2 h-4 w-4 animate-spin" />}
-                    Save Changes
+            <div className="flex justify-end">
+                <Button onClick={handleUpdate} disabled={!isDirty || isUpdating}>
+                    {isUpdating && <CircleNotch className="animate-spin" />}
+                    Simpan
                 </Button>
-            )}
+            </div>
+        </div>
+    );
+}
+
+function Field({
+    label,
+    htmlFor,
+    hint,
+    children,
+}: {
+    label: string;
+    htmlFor: string;
+    hint?: React.ReactNode;
+    children: React.ReactNode;
+}) {
+    return (
+        <div className="grid gap-2">
+            <Label htmlFor={htmlFor}>{label}</Label>
+            {children}
+            {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
         </div>
     );
 }
@@ -167,47 +186,83 @@ function SecurityForm({ user }: { user: NonNullable<SettingsViewProps["user"]> }
     const [isUpdating, setIsUpdating] = React.useState(false);
 
     const handleChange = async () => {
-        if (!newPassword) return toast.error("New password cannot be empty");
-        if (newPassword !== confirmPassword) return toast.error("Passwords do not match");
+        if (!newPassword) return toast.error("Password baru tidak boleh kosong");
+        if (newPassword !== confirmPassword) return toast.error("Konfirmasi password tidak cocok");
         setIsUpdating(true);
         try {
             const response = await changePasswordAction(user.id, { oldPassword, newPassword });
             if (response.status === "success") {
-                toast.success("Password changed!");
+                toast.success("Password diganti");
                 setOldPassword(""); setNewPassword(""); setConfirmPassword("");
-            } else toast.error(response.error?.message || "Failed to change password");
+            } else toast.error(response.error?.message || "Gagal mengganti password");
         } finally {
             setIsUpdating(false);
         }
     };
 
     return (
-        <div className="space-y-5">
-            <div className="grid gap-3">
-                <div className="grid gap-1.5">
-                    <Label className="text-sm font-medium">Current Password</Label>
-                    <Input type="password" value={oldPassword} onChange={e => setOldPassword(e.target.value)} className="h-10" placeholder="••••••••" />
-                </div>
-                <div className="grid gap-1.5">
-                    <Label className="text-sm font-medium">New Password</Label>
-                    <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="h-10" placeholder="Min 8 characters" />
-                </div>
-                <div className="grid gap-1.5">
-                    <Label className="text-sm font-medium">Confirm New Password</Label>
-                    <Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="h-10" placeholder="Repeat new password" />
-                </div>
+        <div className="space-y-6">
+            <div className="grid gap-5">
+                <Field label="Password saat ini" htmlFor="oldPassword">
+                    <Input id="oldPassword" type="password" autoComplete="current-password" value={oldPassword} onChange={e => setOldPassword(e.target.value)} />
+                </Field>
+                <Field label="Password baru" htmlFor="newPassword" hint="Minimal 8 karakter.">
+                    <Input id="newPassword" type="password" autoComplete="new-password" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+                </Field>
+                <Field label="Ulangi password baru" htmlFor="confirmPassword">
+                    <Input id="confirmPassword" type="password" autoComplete="new-password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
+                </Field>
             </div>
-            <Button onClick={handleChange} disabled={isUpdating || !newPassword} className="w-full font-bold h-11">
-                {isUpdating ? <CircleNotch className="mr-2 h-4 w-4 animate-spin" /> : <Key className="mr-2 h-4 w-4" />}
-                Change Password
-            </Button>
+            <div className="flex justify-end">
+                <Button onClick={handleChange} disabled={isUpdating || !newPassword}>
+                    {isUpdating && <CircleNotch className="animate-spin" />}
+                    Ganti password
+                </Button>
+            </div>
+        </div>
+    );
+}
+
+function AppearanceSection() {
+    const { theme, setTheme } = useTheme();
+    const [mounted, setMounted] = React.useState(false);
+    React.useEffect(() => setMounted(true), []);
+
+    const options = [
+        { id: "system", label: "Ikuti sistem", icon: Desktop },
+        { id: "light", label: "Terang", icon: Sun },
+        { id: "dark", label: "Gelap", icon: Moon },
+    ];
+
+    return (
+        <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">Tema</p>
+            <div className="divide-y divide-border rounded-md border border-border" role="radiogroup" aria-label="Tema">
+                {options.map(({ id, label, icon: Icon }) => {
+                    const selected = mounted && theme === id;
+                    return (
+                        <button
+                            key={id}
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            onClick={() => setTheme(id)}
+                            className="flex w-full items-center gap-3 px-3 py-3 text-left text-sm transition-colors hover:bg-muted/50"
+                        >
+                            <Icon className="size-4 text-muted-foreground" />
+                            <span className="flex-1">{label}</span>
+                            {selected && <Check className="size-4" />}
+                        </button>
+                    );
+                })}
+            </div>
         </div>
     );
 }
 
 function AboutRow({ label, value }: { label: string; value: string }) {
     return (
-        <div className="flex items-center justify-between py-3">
+        <div className="flex items-center justify-between py-2.5">
             <span className="text-sm text-muted-foreground">{label}</span>
             <span className="text-sm font-medium tabular-nums">{value}</span>
         </div>
@@ -220,117 +275,126 @@ function AboutSection() {
     const [runtime, setRuntime] = React.useState("Web");
     React.useEffect(() => {
         setRuntime(
-            isNative() ? `Android (${platform()})` : "Web",
+            isNative() ? (platform() === "ios" ? "iOS" : "Android") : "Web",
         );
     }, []);
 
     return (
-        <div className="flex flex-col gap-6">
-            <div className="flex flex-col items-center text-center gap-3 pt-4">
+        <div className="space-y-6">
+            <div className="flex items-center gap-3">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                    src="/icons/maskable_icon.png"
-                    alt="Komunikasi"
-                    width={72}
-                    height={72}
-                    className="rounded-2xl"
-                />
-                <div className="space-y-1">
-                    <h3 className="font-bold text-lg">Komunikasi</h3>
-                    <p className="text-sm text-muted-foreground">
-                        Versi {APP_VERSION} (build {APP_VERSION_CODE})
-                    </p>
+                <img src="/icons/maskable_icon.png" alt="" width={40} height={40} className="rounded-lg" />
+                <div>
+                    <p className="font-medium">Komunikasi</p>
+                    <p className="text-sm text-muted-foreground">Versi {APP_VERSION}</p>
                 </div>
             </div>
 
-            <div className="rounded-2xl border border-border bg-card px-4 divide-y divide-border">
+            <div className="divide-y divide-border rounded-md border border-border px-3">
                 <AboutRow label="Versi" value={APP_VERSION} />
                 <AboutRow label="Build" value={String(APP_VERSION_CODE)} />
                 <AboutRow label="Platform" value={runtime} />
             </div>
 
-            <div className="flex flex-col items-center gap-2 text-center">
-                <Link
-                    href="/CHANGELOG.md"
-                    className="text-sm text-primary hover:underline font-medium"
-                >
+            <div className="flex items-center justify-between text-sm">
+                <Link href="/CHANGELOG.md" className="underline underline-offset-4">
                     Catatan rilis
                 </Link>
-                <p className="text-xs text-muted-foreground">
-                    Lisensi privately. All rights reserved.
-                </p>
+                <span className="text-xs text-muted-foreground">© {new Date().getFullYear()} Komunikasi</span>
             </div>
         </div>
     );
 }
 
 export default function SettingsView({ user }: SettingsViewProps) {
-    const [selectedSection, setSelectedSection] = React.useState<string | null>(null);
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const param = searchParams.get("section");
+    // null = the section list. Mobile shows either the list or one section;
+    // desktop always shows both, so it falls back to the first section.
+    const selected = sections.find((s) => s.id === param)?.id ?? null;
+    const active: SectionId = selected ?? "profile";
+
+    // push, not replace, so the Android back button returns to the list.
+    const open = (id: SectionId) => router.push(`/settings?section=${id}`, { scroll: false });
 
     if (!user) {
         return (
-            <div className="flex flex-col items-center justify-center h-full gap-4">
-                <p className="text-muted-foreground">Please login to access settings.</p>
-                <Button asChild><Link href="/">Login</Link></Button>
+            <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+                <p className="text-sm text-muted-foreground">Masuk dulu untuk membuka pengaturan.</p>
+                <Button asChild><Link href="/">Masuk</Link></Button>
             </div>
         );
     }
 
-    if (selectedSection) {
-        return (
-            <div className="flex flex-col h-full bg-background">
-                <div className="flex items-center gap-2 px-4 md:px-6 border-b border-border bg-background/60 backdrop-blur-xl sticky top-0 z-10 h-14 shrink-0">
-                    <Button variant="ghost" size="icon" onClick={() => setSelectedSection(null)} className="rounded-full h-8 w-8">
-                        <CaretLeft weight="duotone" className="h-5 w-5" />
-                    </Button>
-                    <h1 className="font-bold text-base">{sections.find(s => s.id === selectedSection)?.label}</h1>
-                </div>
-                <ScrollArea className="flex-1">
-                    <div className="px-4 pt-5 pb-24 max-w-lg mx-auto">
-                        {selectedSection === "profile" && <ProfileForm user={user} />}
-                        {selectedSection === "security" && <SecurityForm user={user} />}
-                        {selectedSection === "appearance" && (
-                            <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
-                                <div className="h-16 w-16 rounded-full bg-accent flex items-center justify-center">
-                                    <PaintbrushIcon className="h-8 w-8 text-muted-foreground" />
-                                </div>
-                                <div className="space-y-1">
-                                    <h3 className="font-bold">Theme Customization</h3>
-                                    <p className="text-sm text-muted-foreground">Custom themes are coming soon.</p>
-                                </div>
-                                <Button variant="secondary" disabled>Coming Soon</Button>
-                            </div>
-                        )}
-                        {selectedSection === "about" && <AboutSection />}
-                    </div>
-                </ScrollArea>
-            </div>
-        );
-    }
+    const current = sections.find((s) => s.id === active)!;
 
     return (
-        <div className="flex flex-col h-full bg-background/50">
-            <div className="flex items-center px-4 md:px-6 border-b border-border bg-background/60 backdrop-blur-xl sticky top-0 z-10 h-14 shrink-0">
-                <h1 className="font-bold text-base">Settings</h1>
-            </div>
-            <div className="flex-1 overflow-y-auto px-4 pt-5 pb-24">
-                <div className="max-w-lg mx-auto rounded-2xl overflow-hidden border border-border bg-card divide-y divide-border">
-                    {sections.map(({ id, label, icon: Icon }) => (
-                        <button
-                            key={id}
-                            onClick={() => setSelectedSection(id)}
-                            className="w-full flex items-center justify-between px-4 py-4 hover:bg-muted/50 transition-colors active:bg-muted/80 text-left"
-                        >
-                            <div className="flex items-center gap-3">
-                                <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center">
-                                    <Icon className="h-4 w-4 text-accent-foreground" />
-                                </div>
-                                <span className="font-medium">{label}</span>
-                            </div>
-                            <CaretRight weight="duotone" className="h-4 w-4 text-muted-foreground" />
-                        </button>
-                    ))}
-                </div>
+        <div className="flex h-full flex-col bg-background">
+            <header className="flex h-14 shrink-0 items-center gap-1 border-b border-border px-2 md:px-6">
+                {selected && (
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => router.push("/settings", { scroll: false })}
+                        className="size-9 md:hidden"
+                        aria-label="Kembali"
+                    >
+                        <CaretLeft className="size-5" />
+                    </Button>
+                )}
+                <h1 className={cn("text-[15px] font-semibold tracking-tight", !selected && "px-2 md:px-0")}>
+                    <span className="md:hidden">{selected ? current.label : "Pengaturan"}</span>
+                    <span className="hidden md:inline">Pengaturan</span>
+                </h1>
+            </header>
+
+            <div className="flex min-h-0 flex-1">
+                {/* Section list: the whole screen on mobile, a left rail on desktop. */}
+                <nav
+                    className={cn(
+                        "w-full shrink-0 overflow-y-auto md:block md:w-60 md:border-r md:border-border md:p-3",
+                        selected && "max-md:hidden"
+                    )}
+                >
+                    <ul className="divide-y divide-border md:space-y-0.5 md:divide-y-0">
+                        {sections.map(({ id, label, description, icon: Icon }) => (
+                            <li key={id}>
+                                <button
+                                    type="button"
+                                    onClick={() => open(id)}
+                                    aria-current={active === id ? "page" : undefined}
+                                    className={cn(
+                                        "flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors active:bg-muted md:rounded-md md:px-2.5 md:py-2",
+                                        active === id ? "md:bg-muted" : "md:hover:bg-muted/60"
+                                    )}
+                                >
+                                    <Icon className="size-[18px] shrink-0 text-muted-foreground" />
+                                    <span className="min-w-0 flex-1">
+                                        <span className="block text-sm font-medium md:font-normal">{label}</span>
+                                        <span className="block truncate text-xs text-muted-foreground md:hidden">{description}</span>
+                                    </span>
+                                    <CaretRight className="size-4 text-muted-foreground md:hidden" />
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                </nav>
+
+                <main
+                    className={cn(
+                        "min-w-0 flex-1 overflow-y-auto",
+                        !selected && "max-md:hidden"
+                    )}
+                >
+                    <div className="mx-auto max-w-xl px-4 pb-[calc(4rem+env(safe-area-inset-bottom))] pt-6 md:px-8 md:pb-10 md:pt-8">
+                        <h2 className="mb-6 hidden text-lg font-semibold tracking-tight md:block">{current.label}</h2>
+                        {active === "profile" && <ProfileForm user={user} />}
+                        {active === "security" && <SecurityForm user={user} />}
+                        {active === "appearance" && <AppearanceSection />}
+                        {active === "about" && <AboutSection />}
+                    </div>
+                </main>
             </div>
         </div>
     );

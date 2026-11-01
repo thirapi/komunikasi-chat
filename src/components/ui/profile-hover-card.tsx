@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { Sparkle, ChatTeardropText, CircleNotch } from "@phosphor-icons/react/dist/ssr";
+import { ChatTeardropText, CircleNotch } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,7 @@ import { getPublicProfileAction } from "@/app/(with-sidebar)/user.action";
 interface ProfileData {
   id: string;
   username: string;
+  name?: string | null;
   avatar: string;
   banner?: string | null;
   bio?: string | null;
@@ -23,6 +24,7 @@ interface ProfileHoverCardProps {
   currentUserId: string;
   onStartDM: (userId: string) => void;
   children: React.ReactNode;
+  side?: "top" | "right" | "bottom" | "left";
 }
 
 export function ProfileHoverCard({
@@ -31,6 +33,7 @@ export function ProfileHoverCard({
   currentUserId,
   onStartDM,
   children,
+  side = "right",
 }: ProfileHoverCardProps) {
   const [profile, setProfile] = useState<ProfileData>(user);
   const [isLoading, setIsLoading] = useState(false);
@@ -42,7 +45,7 @@ export function ProfileHoverCard({
     try {
       const response = await getPublicProfileAction(user.username);
       if (response.status === "success" && response.data) {
-        setProfile(response.data);
+        setProfile((prev) => ({ ...prev, ...response.data }));
       }
     } catch (e) {
       console.error("Failed to fetch full profile", e);
@@ -52,81 +55,79 @@ export function ProfileHoverCard({
     }
   };
 
+  const displayName = profile.name || profile.username;
+  const hasImageBanner =
+    !!profile.banner && (profile.banner.startsWith("http") || profile.banner.startsWith("/"));
+
   const ProfileContent = (
-    <div className="flex flex-col w-full md:w-72">
-      {/* Mini Banner */}
+    <div className="flex flex-col w-full">
       <div
-        className="h-20 w-full bg-zinc-900 relative flex-shrink-0"
-        style={{
-          background:
-            profile.banner && (profile.banner.startsWith("http") || profile.banner.startsWith("/"))
-              ? `url(${profile.banner}) center/cover no-repeat`
-              : (profile.banner || "#18181b"),
-        }}
-      >
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+        className="h-16 w-full shrink-0 bg-muted"
+        style={
+          profile.banner
+            ? { background: hasImageBanner ? `url(${profile.banner}) center/cover no-repeat` : profile.banner }
+            : undefined
+        }
+      />
 
-        {/* Subtle Loading Indicator in Banner */}
-        {isLoading && (
-          <div className="absolute top-2 right-2 p-1 bg-black/40 backdrop-blur-sm rounded-full">
-            <CircleNotch weight="duotone" className="w-3 h-3 animate-spin text-white/70" />
-          </div>
-        )}
-      </div>
-
-      <div className="relative px-4 pb-4 pt-10">
-        {/* Overlapping Avatar */}
-        <div className="absolute -top-10 left-3">
-          <div className="p-1 bg-zinc-950 rounded-xl ring-1 ring-white/10">
-            <UserAvatar src={profile.avatar || "/avatars/avatar1.png"} className="h-16 w-16 rounded-lg" />
-            <div
+      <div className="relative px-4 pb-4">
+        <div className="-mt-9 mb-2 flex items-end justify-between">
+          <div className="relative">
+            <UserAvatar
+              src={profile.avatar || "/avatars/avatar1.png"}
+              className="h-[72px] w-[72px] rounded-full ring-4 ring-popover"
+            />
+            <span
               className={cn(
-                "absolute bottom-1.5 right-1.5 h-3.5 w-3.5 rounded-full border-2 border-zinc-950 shadow-sm",
-                isOnline ? "bg-emerald-500" : "bg-zinc-500"
+                "absolute bottom-1 right-1 h-4 w-4 rounded-full ring-[3px] ring-popover",
+                isOnline ? "bg-emerald-500" : "bg-muted-foreground/40"
               )}
+              aria-label={isOnline ? "Online" : "Offline"}
             />
           </div>
+          {isLoading && (
+            <CircleNotch className="mb-1 h-3.5 w-3.5 animate-spin text-muted-foreground" />
+          )}
         </div>
 
-        {/* Info */}
-        <div className="space-y-3">
-          <div className="flex flex-col">
-            <h3 className="text-base font-bold text-white tracking-tight leading-tight">
-              {profile.username}
-            </h3>
-            {profile.customStatus && (
-              <div className="flex items-center gap-1.5 mt-1 opacity-80">
-                <Sparkle weight="duotone" className="w-2.5 h-2.5 text-amber-500" />
-                <p className="text-[11px] text-zinc-300 leading-none truncate">{profile.customStatus}</p>
-              </div>
-            )}
+        <h3 className="text-base font-semibold leading-tight text-foreground truncate">{displayName}</h3>
+        <p className="text-[13px] text-muted-foreground truncate">
+          @{profile.username}
+          <span className="mx-1.5 text-muted-foreground/50">·</span>
+          <span className={isOnline ? "text-emerald-600 dark:text-emerald-400" : undefined}>
+            {isOnline ? "Online" : "Offline"}
+          </span>
+        </p>
+
+        {profile.customStatus && (
+          <p className="mt-2 text-[13px] text-foreground/90 rounded-md bg-muted/60 px-2.5 py-1.5 break-words">
+            {profile.customStatus}
+          </p>
+        )}
+
+        {profile.bio && (
+          <div className="mt-3">
+            <p className="text-[11px] font-medium text-muted-foreground mb-0.5">Tentang</p>
+            <p className="text-[13px] leading-snug text-foreground/90 whitespace-pre-line line-clamp-4 break-words">
+              {profile.bio}
+            </p>
           </div>
+        )}
 
-          {profile.bio && (
-            <p className="text-[11px] text-zinc-400 leading-relaxed italic">{profile.bio}</p>
-          )}
-
-          <div className="flex flex-col gap-2 pt-3 border-t border-white/5">
-            {profile.id !== currentUserId && (
-              <Button
-                variant="default"
-                size="sm"
-                className="w-full gap-2 h-9 text-xs font-bold shadow-lg bg-primary hover:bg-primary/90"
-                onClick={() => onStartDM(profile.id)}
-              >
-                <ChatTeardropText weight="duotone" className="w-3.5 h-3.5" />
-                Kirim Pesan
-              </Button>
-            )}
+        <div className="mt-4 flex gap-2">
+          {profile.id !== currentUserId && (
             <Button
-              variant="secondary"
               size="sm"
-              asChild
-              className="w-full h-9 text-xs font-bold bg-white/5 hover:bg-white/10 text-white border-0"
+              className="flex-1 h-8 gap-1.5 text-xs"
+              onClick={() => onStartDM(profile.id)}
             >
-              <Link href={`/profile/${profile.username}`}>Lihat Profil</Link>
+              <ChatTeardropText className="h-3.5 w-3.5" />
+              Kirim pesan
             </Button>
-          </div>
+          )}
+          <Button variant="outline" size="sm" asChild className="flex-1 h-8 text-xs">
+            <Link href={`/profile/${profile.username}`}>Lihat profil</Link>
+          </Button>
         </div>
       </div>
     </div>
@@ -138,14 +139,15 @@ export function ProfileHoverCard({
       <span className="hidden md:inline-block">
         <Popover onOpenChange={(open) => open && fetchFullProfile()}>
           <PopoverTrigger asChild>{children}</PopoverTrigger>
-          <PopoverContent className="w-72 p-0 overflow-hidden border-0 shadow-2xl bg-zinc-950 ring-1 ring-white/10" side="right" align="start">
+          <PopoverContent className="w-72 p-0 overflow-hidden rounded-lg shadow-lg" side={side} align="start" sideOffset={8} collisionPadding={12}>
             {ProfileContent}
           </PopoverContent>
         </Popover>
       </span><span className="inline-block md:hidden">
         <Dialog onOpenChange={(open) => open && fetchFullProfile()}>
           <DialogTrigger asChild>{children}</DialogTrigger>
-          <DialogContent className="p-0 w-[90vw] max-w-xs overflow-hidden border-0 shadow-2xl bg-zinc-950 [&>button]:hidden">
+          <DialogContent className="p-0 w-[90vw] max-w-xs overflow-hidden gap-0 bg-popover [&>button]:hidden">
+            <DialogTitle className="sr-only">Profil {profile.username}</DialogTitle>
             {ProfileContent}
           </DialogContent>
         </Dialog>

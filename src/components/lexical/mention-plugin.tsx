@@ -244,36 +244,40 @@ export function MentionPlugin({
     return (
         <div
             ref={menuRef}
-            className="absolute bottom-[calc(100%+8px)] left-0 w-56 sm:w-64 bg-background/95 backdrop-blur-md shadow-[0_-4px_24px_rgba(0,0,0,0.1)] border border-border/50 rounded-xl overflow-hidden z-[60] flex flex-col py-1"
+            className="absolute bottom-[calc(100%+8px)] left-0 w-60 sm:w-64 bg-popover text-popover-foreground shadow-lg border border-border rounded-lg overflow-hidden z-[60] flex flex-col"
         >
-            <div className="px-3 py-1.5 text-[10px] font-bold text-muted-foreground tracking-widest border-b border-border/40">
-                Pilih Anggota
+            <div className="px-3 pt-2 pb-1 text-[11px] font-medium text-muted-foreground">
+                Sebut anggota
             </div>
-            <div className="max-h-60 overflow-y-auto p-1 scrollbar-thin">
+            <div className="max-h-60 overflow-y-auto px-1 pb-1">
                 {options.map((opt, idx) => (
                     <button
                         key={opt.id}
                         onClick={() => insertMention(opt)}
                         onMouseEnter={() => setSelectedIndex(idx)}
                         className={cn(
-                            "flex items-center gap-3 w-full px-2 py-2 text-sm text-left transition-colors rounded-lg select-none",
-                            idx === selectedIndex
-                                ? "bg-primary/10 text-primary font-semibold"
-                                : "hover:bg-muted font-medium text-foreground/90"
+                            "flex items-center gap-2.5 w-full px-2 h-8 text-[13px] text-left rounded-md select-none",
+                            idx === selectedIndex ? "bg-muted text-foreground" : "text-foreground/90"
                         )}
                     >
                         {opt.id === "everyone" ? (
-                            <div className="w-5 h-5 flex-shrink-0 rounded-md bg-primary/20 flex items-center justify-center">
-                                <span className="text-primary text-xs font-black">@</span>
-                            </div>
+                            <span className="w-5 h-5 shrink-0 rounded-full bg-muted-foreground/15 flex items-center justify-center text-[11px] font-semibold text-muted-foreground">
+                                @
+                            </span>
                         ) : (
                             <img
                                 src={opt.avatar}
-                                alt={opt.username}
-                                className="w-5 h-5 rounded-md object-cover flex-shrink-0"
+                                alt=""
+                                className="w-5 h-5 rounded-full object-cover shrink-0"
                             />
                         )}
-                        <span className="truncate">{opt.username}</span>
+                        <span className="truncate font-medium">{opt.username}</span>
+                        {opt.id === "everyone" && (
+                            <span className="ml-auto text-[11px] text-muted-foreground shrink-0">semua anggota</span>
+                        )}
+                        {idx === selectedIndex && opt.id !== "everyone" && (
+                            <kbd className="ml-auto text-[10px] text-muted-foreground font-sans shrink-0">↵</kbd>
+                        )}
                     </button>
                 ))}
             </div>

@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { debounce } from "@/lib/debounce";
-import { UserPlus, MagnifyingGlass, CircleNotch, Check, X, Link as LinkIcon } from "@phosphor-icons/react/dist/ssr";
+import { MagnifyingGlass, CircleNotch, Check } from "@phosphor-icons/react/dist/ssr";
 import {
   Dialog,
   DialogContent,
@@ -13,7 +13,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { Badge } from "@/components/ui/badge";
 import { searchInvitableUsers, inviteToChannel } from "../room.action";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -110,46 +109,40 @@ export function InviteMemberDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[420px]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <UserPlus weight="duotone" className="w-5 h-5 text-primary" />
-            Undang Anggota
-          </DialogTitle>
+          <DialogTitle>Undang anggota</DialogTitle>
           <DialogDescription>
-            Cari pengguna untuk diundang ke{" "}
-            <span className="font-semibold text-foreground">#{roomName}</span>
+            Tambahkan orang ke{" "}
+            <span className="font-medium text-foreground">#{roomName}</span>
           </DialogDescription>
         </DialogHeader>
 
         {/* Search Input */}
         <div className="relative">
-          <MagnifyingGlass weight="duotone" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <MagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Cari nama pengguna..."
+            placeholder="Cari username"
             value={query}
             onChange={(e) => handleSearch(e.target.value)}
             className="pl-9"
             autoFocus
           />
           {isSearching && (
-            <CircleNotch weight="duotone" className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
+            <CircleNotch className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
           )}
         </div>
 
         {/* Results */}
-        <div className="min-h-[140px] max-h-[240px] overflow-y-auto space-y-1.5 pr-1">
+        <div className="-mx-2 min-h-[140px] max-h-[240px] overflow-y-auto">
           {query.length < 2 && (
-            <div className="flex flex-col items-center justify-center h-[140px] text-center text-muted-foreground">
-              <MagnifyingGlass weight="duotone" className="w-8 h-8 mb-2 opacity-30" />
-              <p className="text-sm">Ketik minimal 2 huruf untuk mencari</p>
-            </div>
+            <p className="flex h-[140px] items-center justify-center px-4 text-center text-sm text-muted-foreground">
+              Ketik minimal dua huruf untuk mencari.
+            </p>
           )}
 
           {!isSearching && query.length >= 2 && results.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-[140px] text-center text-muted-foreground">
-              <X weight="duotone" className="w-8 h-8 mb-2 opacity-30" />
-              <p className="text-sm">Tidak ada pengguna yang ditemukan</p>
-              <p className="text-xs">Coba nama yang berbeda</p>
-            </div>
+            <p className="flex h-[140px] items-center justify-center px-4 text-center text-sm text-muted-foreground">
+              Tidak ada pengguna yang cocok.
+            </p>
           )}
 
           {results.map((user) => {
@@ -159,40 +152,32 @@ export function InviteMemberDialog({
             return (
               <div
                 key={user.id}
-                className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition-colors"
+                className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted/60 transition-colors"
               >
                 <UserAvatar 
                   src={user.avatar} 
                   alt={user.username}
-                  className="h-9 w-9 rounded-lg"
+                  className="h-8 w-8 rounded-full"
                 />
 
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate">{user.username}</p>
+                  <p className="text-sm font-medium truncate">@{user.username}</p>
                 </div>
 
                 {isInvited ? (
-                  <Badge
-                    variant="secondary"
-                    className="gap-1 text-emerald-600 bg-emerald-500/10 border-emerald-500/20 shrink-0"
-                  >
-                    <Check weight="duotone" className="w-3 h-3" />
+                  <span className="inline-flex h-8 items-center gap-1 px-2 text-xs text-muted-foreground shrink-0">
+                    <Check weight="bold" className="w-3.5 h-3.5 text-primary" />
                     Diundang
-                  </Badge>
+                  </span>
                 ) : (
                   <Button
                     size="sm"
                     variant="outline"
-                    className="gap-1.5 h-8 text-xs font-semibold shrink-0"
+                    className="h-8 text-xs shrink-0"
                     onClick={() => handleInvite(user)}
                     disabled={isInviting}
                   >
-                    {isInviting ? (
-                      <CircleNotch weight="duotone" className="w-3 h-3 animate-spin" />
-                    ) : (
-                      <UserPlus weight="duotone" className="w-3 h-3" />
-                    )}
-                    {isInviting ? "Mengundang..." : "Undang"}
+                    {isInviting ? <CircleNotch className="w-3.5 h-3.5 animate-spin" /> : "Undang"}
                   </Button>
                 )}
               </div>
@@ -202,45 +187,30 @@ export function InviteMemberDialog({
 
         {/* Invitation Link Section */}
         <div className="pt-4 border-t space-y-3">
-          <div className="flex flex-col gap-1.5">
-            <h4 className="text-sm font-medium text-foreground">Tautan Undangan</h4>
-            <p className="text-xs text-muted-foreground">Bagikan tautan ini kepada orang lain agar mereka dapat bergabung.</p>
+          <div className="flex flex-col gap-0.5">
+            <h4 className="text-sm font-medium text-foreground">Tautan undangan</h4>
+            <p className="text-xs text-muted-foreground">Siapa pun yang punya tautan ini bisa bergabung.</p>
           </div>
           <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Input
-                readOnly
-                value={`${typeof window !== "undefined" ? window.location.origin : ""}/join/${roomId}`}
-                className="pr-10 bg-muted/50 text-xs font-mono"
-              />
-              <Button
-                size="icon"
-                variant="ghost"
-                className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                onClick={() => {
-                  const link = `${window.location.origin}/join/${roomId}`;
-                  navigator.clipboard.writeText(link);
-                  toast.success("Tautan disalin ke papan klip");
-                }}
-              >
-                <LinkIcon weight="duotone" className="w-3.5 h-3.5" />
-              </Button>
-            </div>
+            <Input
+              readOnly
+              value={`${typeof window !== "undefined" ? window.location.origin : ""}/join/${roomId}`}
+              className="flex-1 bg-muted/40 text-xs font-mono"
+              onFocus={(e) => e.currentTarget.select()}
+            />
             <Button
               size="sm"
-              className="shrink-0"
+              variant="outline"
+              className="shrink-0 h-9"
               onClick={() => {
                 const link = `${window.location.origin}/join/${roomId}`;
                 navigator.clipboard.writeText(link);
-                toast.success("Tautan disalin ke papan klip");
+                toast.success("Tautan disalin");
               }}
             >
               Salin
             </Button>
           </div>
-          <p className="text-[10px] text-muted-foreground/60 italic">
-            * {roomName} bersifat {roomName.toLowerCase() === "general" ? "publik" : "privat"}. Pastikan Anda mengundang orang yang tepat.
-          </p>
         </div>
       </DialogContent>
     </Dialog>

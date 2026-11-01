@@ -2,9 +2,20 @@ import { cookies } from "next/headers";
 
 const COOKIE_NAME = "impersonate_user_id";
 
+/**
+ * The user an admin is currently viewing as, or null.
+ *
+ * The cookie alone is not trusted: anyone can put a cookie with this name in
+ * their own browser. It only takes effect when the *session* belongs to an
+ * admin, which is the same check startImpersonation() performs.
+ */
 export async function getImpersonatedUserId(): Promise<string | null> {
     const cookieStore = await cookies();
-    return cookieStore.get(COOKIE_NAME)?.value || null;
+    const value = cookieStore.get(COOKIE_NAME)?.value || null;
+    if (!value) return null;
+    // Imported lazily: role-guard -> auth.action is a heavy server graph.
+    const { adminGuard } = await import("@/lib/middlewares/role-guard.middleware");
+    return (await adminGuard()) ? value : null;
 }
 
 export async function getEffectiveUserId(sessionUserId: string): Promise<string> {

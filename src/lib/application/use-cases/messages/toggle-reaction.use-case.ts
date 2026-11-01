@@ -1,3 +1,4 @@
+import { roomChannel } from "@/lib/pusher/channels";
 import { IReactionRepository } from "../../repositories/reaction.repository.interface";
 import { IMessageRepository } from "../../repositories/message.repository.interface";
 import { IPusherService } from "../../services/pusher.service.interface";
@@ -16,7 +17,7 @@ export class ToggleReactionUseCase {
     const result = await this.reactionRepository.toggleReaction(userId, messageId, emoji);
 
     // Broadcast realtime event
-    await this.pusherService.trigger(`chat-${roomId}`, "message-reaction", {
+    await this.pusherService.trigger(roomChannel(roomId), "message-reaction", {
       messageId,
       userId,
       emoji,

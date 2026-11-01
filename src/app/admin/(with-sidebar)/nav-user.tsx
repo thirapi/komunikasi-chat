@@ -18,6 +18,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { clientChatCache } from "@/lib/infrastructure/cache/client-cache";
 import { signOutUserAction } from "@/app/auth.action";
 import { useRouter } from "next/navigation";
 
@@ -46,6 +47,7 @@ export function NavUser({
   const router = useRouter() ;
 
   const handleLogout = async () => {
+    await clientChatCache.clearAll();
     await signOutUserAction();
   };
 

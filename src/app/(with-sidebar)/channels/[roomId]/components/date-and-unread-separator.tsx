@@ -1,22 +1,15 @@
-export function DateAndUnreadSeparator({ date }: { date: Date }) {
-  const formattedDate = date.toLocaleDateString("id-ID", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+import { formatSeparatorDate } from "./date-separator";
 
+export function DateAndUnreadSeparator({ date }: { date: Date }) {
   return (
-    <div className="flex items-center justify-between px-4 py-2">
-      <div className="flex items-center flex-1">
-        <div className="flex-grow h-px bg-destructive/50" />
-        <span className="mx-4 text-sm text-destructive whitespace-nowrap">
-          {formattedDate}
-        </span>
-        <div className="flex-grow h-px bg-destructive/50" />
-      </div>
-      <span className="ml-2 px-2 py-0.5 bg-destructive text-destructive-foreground text-[10px] font-semibold rounded-full">
-        NEW
+    <div role="separator" className="flex items-center gap-3 pl-4 pr-3 my-4 select-none">
+      <div className="h-px flex-1 bg-rose-500/70" />
+      <span className="text-[11px] font-medium text-rose-500">
+        {formatSeparatorDate(date)}
+      </span>
+      <div className="h-px flex-1 bg-rose-500/70" />
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-rose-500">
+        Baru
       </span>
     </div>
   );

@@ -1,19 +1,15 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
-import { MagnifyingGlass, X, ChatTeardropText, CircleNotch } from "@phosphor-icons/react/dist/ssr";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { MagnifyingGlass, X, CircleNotch } from "@phosphor-icons/react/dist/ssr";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { searchMessagesAction } from "@/app/(with-sidebar)/channels/[roomId]/messages.action";
 import { MessageWithUserDTO } from "@/lib/entities/models/message.model";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { Kbd, Shortcut } from "@/components/ui/kbd";
+import { stripMarkdown } from "@/lib/strip-markdown";
+import { clientChatCache } from "@/lib/infrastructure/cache/client-cache";
+import { cn } from "@/lib/utils";
 import { format } from "date-fns/format";
 import { id } from "date-fns/locale/id";
 
@@ -24,169 +20,204 @@ interface MessageSearchProps {
   onSelectMessage: (messageId: string, roomId?: string) => void;
 }
 
-export function MessageSearch({
-  isOpen,
-  onOpenChange,
-  roomId,
-  onSelectMessage,
-}: MessageSearchProps) {
+/**
+ * Spotlight-style message search. Global (Ctrl/⌘+K, owned by the sidebar) when
+ * no roomId is given; scoped to one room (Ctrl/⌘+F, owned by the chat room)
+ * otherwise. Fully keyboard driven: type, ↑/↓ to move, Enter to open.
+ */
+export function MessageSearch({ isOpen, onOpenChange, roomId, onSelectMessage }: MessageSearchProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<MessageWithUserDTO[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchedFor, setSearchedFor] = useState("");
+  const [active, setActive] = useState(0);
+  const listRef = useRef<HTMLUListElement>(null);
+  const requestRef = useRef(0);
+
+  const scopeName = roomId ? clientChatCache.getRoomSync(roomId)?.name : null;
 
   const handleSearch = useCallback(async (searchQuery: string) => {
-    if (searchQuery.trim().length < 2) {
+    const q = searchQuery.trim();
+    if (q.length < 2) {
       setResults([]);
+      setSearchedFor("");
       return;
     }
-
+    const req = ++requestRef.current;
     setIsSearching(true);
     try {
-      const response = await searchMessagesAction(searchQuery.trim(), roomId);
-      if (response.status === "success" && response.data) {
-        setResults(response.data);
-      }
+      const response = await searchMessagesAction(q, roomId);
+      // Ignore responses for queries the user has already typed past.
+      if (req !== requestRef.current) return;
+      setResults(response.status === "success" && response.data ? response.data : []);
+      setSearchedFor(q);
+      setActive(0);
     } catch (error) {
-      console.error("MagnifyingGlass error:", error);
+      console.error("Search error:", error);
     } finally {
-      setIsSearching(false);
+      if (req === requestRef.current) setIsSearching(false);
     }
   }, [roomId]);
 
-  // Debounce search
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (query) {
-        handleSearch(query);
-      } else {
-        setResults([]);
-      }
-    }, 300);
-
+    const timer = setTimeout(() => handleSearch(query), 250);
     return () => clearTimeout(timer);
   }, [query, handleSearch]);
+
+  // Start fresh each time it opens.
+  useEffect(() => {
+    if (!isOpen) {
+      setQuery("");
+      setResults([]);
+      setSearchedFor("");
+      setActive(0);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    listRef.current?.querySelector<HTMLElement>(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [active]);
 
   const handleSelect = (message: MessageWithUserDTO) => {
     onSelectMessage(message.id, message.roomId);
     onOpenChange(false);
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (results.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActive((i) => (i + 1) % results.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActive((i) => (i - 1 + results.length) % results.length);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      handleSelect(results[active]);
+    }
+  };
+
   const highlightText = (text: string, highlight: string) => {
     if (!highlight.trim()) return text;
-    const escapedHighlight = highlight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const parts = text.split(new RegExp(`(${escapedHighlight})`, "gi"));
-    return (
-      <span>
-        {parts.map((part, i) =>
-          part.toLowerCase() === highlight.toLowerCase() ? (
-            <mark key={i} className="bg-primary/20 text-primary rounded-sm px-0.5 font-medium">
-              {part}
-            </mark>
-          ) : (
-            part
-          )
-        )}
-      </span>
+    const escaped = highlight.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return text.split(new RegExp(`(${escaped})`, "gi")).map((part, i) =>
+      part.toLowerCase() === highlight.toLowerCase() ? (
+        <mark key={i} className="rounded-[3px] bg-amber-400/30 px-px text-foreground dark:bg-amber-300/25">
+          {part}
+        </mark>
+      ) : (
+        part
+      ),
     );
   };
 
+  const roomLabel = (message: MessageWithUserDTO) => {
+    if (roomId) return null;
+    const room = clientChatCache.getRoomSync(message.roomId);
+    if (!room) return null;
+    return room.isDirect ? "Pesan langsung" : `#${room.name}`;
+  };
+
+  const showEmpty = !isSearching && searchedFor && results.length === 0;
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] p-0 gap-0 overflow-hidden max-h-[85vh] flex flex-col rounded-2xl border-border/40 bg-background">
-        <DialogHeader className="p-6 pb-2">
-          <DialogTitle className="text-xl font-semibold tracking-tight">
-            cari pesan
-          </DialogTitle>
-        </DialogHeader>
+      <DialogContent className="top-[12vh] translate-y-0 sm:max-w-xl p-0 gap-0 overflow-hidden max-h-[70vh] flex flex-col [&>button:last-child]:hidden">
+        <DialogTitle className="sr-only">{roomId ? "Cari di room ini" : "Cari pesan"}</DialogTitle>
+        <DialogDescription className="sr-only">Ketik minimal dua huruf untuk mencari pesan.</DialogDescription>
 
-        <div className="px-6 py-2">
-          <div className="relative group">
-            <MagnifyingGlass weight="duotone" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-primary/60" />
-            <Input
-              placeholder={roomId ? "cari pesan di channel ini..." : "cari pesan di semua channel..."}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="pl-10 pr-10 h-10 rounded-xl bg-muted/30 border-border/50 focus-visible:ring-primary/20"
-              autoFocus
-            />
-            {query && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 hover:bg-transparent"
-                onClick={() => setQuery("")}
-              >
-                <X weight="duotone" className="h-4 w-4 text-muted-foreground" />
-              </Button>
-            )}
-          </div>
+        <div className="flex items-center gap-2.5 border-b border-border px-4 h-12 shrink-0">
+          {isSearching ? (
+            <CircleNotch className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+          ) : (
+            <MagnifyingGlass className="h-4 w-4 shrink-0 text-muted-foreground" />
+          )}
+          <input
+            placeholder={roomId ? `Cari di ${scopeName ? `#${scopeName}` : "room ini"}` : "Cari di semua pesan"}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="flex-1 min-w-0 bg-transparent text-[15px] outline-none placeholder:text-muted-foreground"
+            autoFocus
+            aria-controls="message-search-results"
+            aria-activedescendant={results[active] ? `search-result-${results[active].id}` : undefined}
+          />
+          {query ? (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted"
+              aria-label="Hapus kata kunci"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          ) : (
+            <Kbd>Esc</Kbd>
+          )}
         </div>
 
-        <ScrollArea className="flex-1 mt-2 px-3 pb-4">
-          <div className="p-1">
-            {isSearching ? (
-              <div className="flex flex-col items-center justify-center py-24 gap-3 text-muted-foreground">
-                <CircleNotch weight="duotone" className="h-7 w-7 animate-spin text-primary/60" />
-                <p className="text-sm font-medium">mencari pesan...</p>
-              </div>
-            ) : results.length > 0 ? (
-              <div className="space-y-1">
-                <div className="px-3 py-2 flex items-center justify-between">
-                  <span className="text-[11px] font-semibold text-muted-foreground">hasil pencarian</span>
-                  <span className="text-[10px] text-muted-foreground/60">{results.length} ditemukan</span>
-                </div>
-                {results.map((message) => (
-                  <button
-                    key={message.id}
-                    onClick={() => handleSelect(message)}
-                    className="w-full text-left p-3 rounded-xl hover:bg-accent/40 active:bg-accent/60 transition-all group flex gap-3 border border-transparent hover:border-border/40"
-                  >
-                    <UserAvatar
-                      src={message.user.avatar || "/avatars/avatar1.png"}
-                      alt={message.user.username}
-                      className="h-10 w-10 shrink-0 border border-border/50 transition-all"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2 mb-0.5">
-                        <span className="text-sm font-bold truncate">
-                          {message.user.username}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                          {format(new Date(message.createdAt), "d MMM, HH:mm", { locale: id })}
-                        </span>
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {results.length > 0 ? (
+            <ul id="message-search-results" ref={listRef} role="listbox" className="p-1.5">
+              {results.map((message, index) => {
+                const label = roomLabel(message);
+                return (
+                  <li key={message.id} role="option" aria-selected={index === active} id={`search-result-${message.id}`} data-index={index}>
+                    <button
+                      type="button"
+                      onClick={() => handleSelect(message)}
+                      onMouseMove={() => setActive(index)}
+                      className={cn(
+                        "w-full text-left flex gap-3 rounded-md px-2.5 py-2",
+                        index === active ? "bg-muted" : "",
+                      )}
+                    >
+                      <UserAvatar
+                        src={message.user.avatar || "/avatars/avatar1.png"}
+                        alt={message.user.username}
+                        className="h-8 w-8 shrink-0 rounded-full mt-0.5"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-1.5 min-w-0">
+                          <span className="text-[13px] font-semibold truncate">
+                            {message.user.name || message.user.username}
+                          </span>
+                          {label && <span className="text-xs text-muted-foreground truncate">{label}</span>}
+                          <span className="ml-auto text-[11px] text-muted-foreground whitespace-nowrap tabular-nums">
+                            {format(new Date(message.createdAt), "d MMM, HH:mm", { locale: id })}
+                          </span>
+                        </div>
+                        <p className="text-[13px] text-foreground/80 line-clamp-2 break-words">
+                          {highlightText(stripMarkdown(message.content) || "Lampiran", searchedFor)}
+                        </p>
                       </div>
-                      <p className="text-[13px] text-foreground/80 line-clamp-2 break-words leading-relaxed">
-                        {highlightText((message.content || "").replace(/<@([a-zA-Z0-9_-]+)>/g, "@seseorang"), query)}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            ) : query.length >= 2 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
-                <div className="h-16 w-16 rounded-full bg-muted/30 flex items-center justify-center">
-                  <ChatTeardropText weight="duotone" className="h-8 w-8 text-muted-foreground/20" />
-                </div>
-                <div className="space-y-1 px-4">
-                  <p className="text-sm font-semibold text-muted-foreground">tidak ada hasil ditemukan</p>
-                  <p className="text-xs text-muted-foreground/50 max-w-[250px] mx-auto">coba kata kunci lain atau periksa kembali ejaan anda.</p>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
-                <div className="h-16 w-16 rounded-full bg-muted/20 flex items-center justify-center">
-                  <MagnifyingGlass weight="duotone" className="h-8 w-8 text-muted-foreground/20" />
-                </div>
-                <div className="space-y-1 px-8">
-                  <p className="text-sm font-medium text-muted-foreground/60">cari riwayat pesan</p>
-                  <p className="text-xs text-muted-foreground/40">masukkan kata kunci untuk mulai mencari.</p>
-                </div>
-              </div>
-            )}
-          </div>
-        </ScrollArea>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : showEmpty ? (
+            <div className="px-4 py-10 text-center">
+              <p className="text-sm text-foreground">Tidak ada pesan yang cocok dengan “{searchedFor}”</p>
+              <p className="mt-1 text-xs text-muted-foreground">Coba kata kunci lain yang lebih pendek.</p>
+            </div>
+          ) : (
+            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+              {roomId
+                ? "Ketik untuk mencari pesan di room ini."
+                : "Ketik untuk mencari di semua channel dan obrolan pribadi."}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-4 border-t border-border bg-muted/30 px-4 h-9 shrink-0 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1.5"><Shortcut keys={["up", "down"]} /> pilih</span>
+          <span className="flex items-center gap-1.5"><Shortcut keys={["enter"]} /> buka</span>
+          <span className="ml-auto hidden sm:flex items-center gap-1.5">
+            {roomId ? <>Cari semua pesan <Shortcut keys={["mod", "k"]} /></> : <>Cari di room <Shortcut keys={["mod", "f"]} /></>}
+          </span>
+        </div>
       </DialogContent>
     </Dialog>
   );
 }
-

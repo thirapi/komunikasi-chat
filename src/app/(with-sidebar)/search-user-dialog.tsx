@@ -11,6 +11,7 @@ import { MagnifyingGlass, CircleNotch } from "@phosphor-icons/react/dist/ssr";
 import { searchUsersAction } from "./user.action";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import Link from "next/link";
+import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/hooks/use-debounce";
 
 interface SearchUserDialogProps {
@@ -50,60 +51,56 @@ export function SearchUserDialog({ open, onOpenChange }: SearchUserDialogProps) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px] p-0 gap-0 overflow-hidden bg-background rounded-2xl border-border/40">
-        <DialogHeader className="p-6 pb-2">
-          <DialogTitle className="text-xl font-semibold tracking-tight">
-            cari pengguna
-          </DialogTitle>
+      <DialogContent className="sm:max-w-md p-0 gap-0 overflow-hidden">
+        <DialogHeader className="px-5 pt-5 pb-3">
+          <DialogTitle>Cari pengguna</DialogTitle>
         </DialogHeader>
-        
-        <div className="px-6 py-2">
-          <div className="relative group">
-            <MagnifyingGlass weight="duotone" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-primary/60" />
-            <input
-              className="w-full bg-muted/30 hover:bg-muted/40 focus:bg-muted/50 border-none rounded-xl py-2.5 pl-10 pr-4 text-sm transition-all outline-none ring-1 ring-border/50 focus:ring-2 focus:ring-primary/20"
-              placeholder="cari username atau handle fediverse..."
+
+        <div className="px-5 pb-3">
+          <div className="relative">
+            <MagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              placeholder="Username atau handle fediverse"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               autoFocus
             />
+            {isSearching && (
+              <CircleNotch className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+            )}
           </div>
         </div>
 
-        <div className="max-h-[350px] overflow-y-auto custom-scrollbar px-3 pb-4 mt-2">
-          {isSearching ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground">
-              <CircleNotch weight="duotone" className="h-7 w-7 animate-spin text-primary/60" />
-              <p className="text-sm font-medium">mencari pengguna...</p>
-            </div>
-          ) : results.length > 0 ? (
-            <div className="flex flex-col gap-1">
+        <div className="border-t border-border min-h-[200px] max-h-[360px] overflow-y-auto">
+          {results.length > 0 ? (
+            <ul className="p-1.5">
               {results.map((user) => (
-                <Link key={user.id}
-                  href={user.isRemote ? `/profile/${user.id.startsWith("@") ? user.id : user.handle || `@${user.username}`}` : `/profile/${user.username}`}
-                  onClick={() => onOpenChange(false)}
-                  className="flex items-center gap-3 p-3 rounded-xl hover:bg-accent/40 active:bg-accent/60 transition-all group"
-                >
-                  <UserAvatar src={user.avatar} className="h-10 w-10 border border-border/50 transition-all" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <p className="font-bold text-sm line-clamp-1">{user.username}</p>
+                <li key={user.id}>
+                  <Link
+                    href={user.isRemote ? `/profile/${user.id.startsWith("@") ? user.id : user.handle || `@${user.username}`}` : `/profile/${user.username}`}
+                    onClick={() => onOpenChange(false)}
+                    className="flex items-center gap-3 rounded-md px-2.5 py-2 hover:bg-muted focus-visible:bg-muted focus-visible:outline-none transition-colors"
+                  >
+                    <UserAvatar src={user.avatar} className="h-8 w-8 rounded-full" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{user.username}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {user.isRemote ? (user.handle || "Pengguna fediverse") : `@${user.username.toLowerCase()}`}
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground line-clamp-1">
-                      {user.isRemote ? (user.handle || "pengguna fediverse") : `@${user.username.toLowerCase()}`}
-                    </p>
-                  </div>
-                </Link>
+                  </Link>
+                </li>
               ))}
-            </div>
-          ) : query.length >= 2 ? (
-            <div className="py-20 text-center text-muted-foreground/60 italic text-sm">
-              tidak ada pengguna yang ditemukan.
-            </div>
+            </ul>
           ) : (
-            <div className="py-20 text-center text-muted-foreground/40 text-sm font-medium">
-              mulai mengetik untuk mencari
-            </div>
+            <p className="px-5 py-12 text-center text-sm text-muted-foreground">
+              {isSearching
+                ? "Mencari…"
+                : query.length >= 2
+                  ? "Tidak ada pengguna yang ditemukan."
+                  : "Ketik minimal dua huruf untuk mencari."}
+            </p>
           )}
         </div>
       </DialogContent>

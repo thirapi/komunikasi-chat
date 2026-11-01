@@ -14,7 +14,8 @@ export interface IMessageRepository {
   getRoomIdByMessageId(messageId: string): Promise<string | null>;
   updateMessage(messageId: string, content: string): Promise<MessageWithUserDTO>;
   deleteMessage(messageId: string): Promise<void>;
-  searchMessages(query: string, roomId?: string, limit?: number): Promise<MessageWithUserDTO[]>;
+  /** Without roomId, results are limited to rooms viewerId belongs to (none if viewerId is missing). */
+  searchMessages(query: string, roomId?: string, limit?: number, viewerId?: string): Promise<MessageWithUserDTO[]>;
   getAttachmentsByUserId(userId: string, limit?: number): Promise<AttachmentWithMessageDTO[]>;
   getAttachmentsByRoomId(roomId: string, limit?: number): Promise<AttachmentWithMessageDTO[]>;
 }

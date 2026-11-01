@@ -1,3 +1,4 @@
+import { roomChannel } from "@/lib/pusher/channels";
 import { MessageWithUserDTO } from "../../../entities/models/message.model";
 import { IMessageRepository } from "../../repositories/message.repository.interface";
 import { IRoomRepository } from "../../repositories/room.repository.interface";
@@ -5,6 +6,9 @@ import { INotifierService } from "../../services/discord-notifier.service.interf
 import { IPusherService } from "../../services/pusher.service.interface";
 import { IPushSubscriptionRepository } from "../../repositories/push-subscription.repository.interface";
 import { IWebPushService } from "../../services/web-push.service.interface";
+import { IIdempotencyStore } from "../../services/idempotency.service.interface";
+
+const IDEMPOTENCY_TTL = 10 * 60; // seconds; covers any realistic retry window
 
 export class SendMessageUseCase {
   constructor(
@@ -13,7 +17,8 @@ export class SendMessageUseCase {
     private pusherService: IPusherService,
     private discordNotifierService: INotifierService,
     private pushSubscriptionRepository: IPushSubscriptionRepository,
-    private webPushService: IWebPushService
+    private webPushService: IWebPushService,
+    private idempotencyStore?: IIdempotencyStore
   ) { }
 
   async execute(
@@ -24,17 +29,48 @@ export class SendMessageUseCase {
     attachments?: { url: string; key: string; fileType: string; size?: number }[],
     optimisticId?: string
   ): Promise<MessageWithUserDTO> {
-    const message = await this.messageRepository.createMessage(
-      userId,
-      content,
-      roomId,
-      replyTo,
-      attachments
-    );
+    // A retry of the same optimistic send (the first response was lost, or the
+    // user pressed "Coba lagi") returns the already-created message instead of
+    // posting a duplicate. Best effort: if the store is unreachable we send.
+    const idemKey = optimisticId ? `send:${userId}:${optimisticId}` : null;
+    let claimed = false;
+    if (idemKey && this.idempotencyStore) {
+      try {
+        const existing = await this.idempotencyStore.claim(idemKey, IDEMPOTENCY_TTL);
+        if (existing === null) {
+          claimed = true;
+        } else if (existing !== "__pending__") {
+          const previous = await this.messageRepository.getMessageById(existing);
+          if (previous) return { ...previous, optimisticId };
+        } else {
+          throw new Error("Pesan ini sedang dikirim");
+        }
+      } catch (err) {
+        if (err instanceof Error && err.message === "Pesan ini sedang dikirim") throw err;
+        console.error("[send-message] idempotency store unavailable:", err);
+      }
+    }
+
+    let message: MessageWithUserDTO;
+    try {
+      message = await this.messageRepository.createMessage(
+        userId,
+        content,
+        roomId,
+        replyTo,
+        attachments
+      );
+    } catch (err) {
+      if (claimed && idemKey) await this.idempotencyStore?.release(idemKey).catch(() => {});
+      throw err;
+    }
+    if (claimed && idemKey) {
+      await this.idempotencyStore?.complete(idemKey, message.id, IDEMPOTENCY_TTL).catch(() => {});
+    }
 
     const messageWithOptimisticId = { ...message, optimisticId };
 
-    await this.pusherService.trigger(`chat-${roomId}`, "new-message", messageWithOptimisticId);
+    await this.pusherService.trigger(roomChannel(roomId), "new-message", messageWithOptimisticId);
 
     const [roomData, participants] = await Promise.all([
       this.roomRepository.getRoomById(roomId),
@@ -50,6 +86,9 @@ export class SendMessageUseCase {
       {
         message: messageWithOptimisticId,
         senderId: userId,
+        room: roomData
+          ? { name: roomData.name, isDirect: roomData.isDirect }
+          : null,
       }
     );
 
@@ -75,9 +114,20 @@ export class SendMessageUseCase {
     // without it, which is common on Huawei and degoogled ROMs.
     const pushPromises: Promise<void>[] = [];
 
-    const allSubscriptions = await this.pushSubscriptionRepository.getSubscriptionsByUserIds(
-      receiverIds
-    );
+    // The message is already stored and broadcast at this point. Push and the
+    // Discord webhook are side channels: if either fails (schema drift, network)
+    // the send must still succeed, or the sender sees an error for a message
+    // everyone else already received.
+    let allSubscriptions: Awaited<
+      ReturnType<typeof this.pushSubscriptionRepository.getSubscriptionsByUserIds>
+    > = [];
+    try {
+      allSubscriptions = await this.pushSubscriptionRepository.getSubscriptionsByUserIds(
+        receiverIds
+      );
+    } catch (err) {
+      console.error("[send-message] Failed to load push subscriptions:", err);
+    }
 
     for (const sub of allSubscriptions) {
       if (sub.type === "fcm") {
@@ -120,15 +170,19 @@ export class SendMessageUseCase {
 
     Promise.allSettled(pushPromises).catch(console.error);
 
-    await this.discordNotifierService.sendMessage(
-      [
-        `@everyone`,
-        `**Pesan Baru**`,
-        `Pengirim: **${userName ?? userId}**`,
-        `Ruangan: **${roomData?.name ?? roomId}**`,
-        `Konten:\n> ${notificationContent}`,
-      ].join("\n")
-    );
+    try {
+      await this.discordNotifierService.sendMessage(
+        [
+          `@everyone`,
+          `**Pesan Baru**`,
+          `Pengirim: **${userName ?? userId}**`,
+          `Ruangan: **${roomData?.name ?? roomId}**`,
+          `Konten:\n> ${notificationContent}`,
+        ].join("\n")
+      );
+    } catch (err) {
+      console.error("[send-message] Discord notifier failed:", err);
+    }
 
     return messageWithOptimisticId;
   }

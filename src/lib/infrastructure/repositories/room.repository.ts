@@ -349,6 +349,39 @@ export class RoomRepository implements IRoomRepository {
     return others;
   }
 
+  /**
+   * The facts an authorization check needs about one room for one user, in a
+   * single indexed query (no participant fan-out).
+   */
+  async getRoomAccess(
+    roomId: string,
+    userId: string,
+  ): Promise<{ exists: boolean; isMember: boolean; isPublic: boolean; isDirect: boolean; ownerId: string | null }> {
+    const [row] = await this.client
+      .select({
+        isPublic: rooms.isPublic,
+        isDirect: rooms.isDirect,
+        ownerId: rooms.ownerId,
+        memberId: roomParticipants.id,
+      })
+      .from(rooms)
+      .leftJoin(
+        roomParticipants,
+        and(eq(roomParticipants.roomId, rooms.id), eq(roomParticipants.userId, userId)),
+      )
+      .where(eq(rooms.id, roomId))
+      .limit(1);
+
+    if (!row) return { exists: false, isMember: false, isPublic: false, isDirect: false, ownerId: null };
+    return {
+      exists: true,
+      isMember: !!row.memberId,
+      isPublic: row.isPublic,
+      isDirect: row.isDirect,
+      ownerId: row.ownerId,
+    };
+  }
+
   async getParticipantIds(roomId: string): Promise<string[]> {
     // Only the membership set is needed by the invite search. getRoomById
     // would drag in rooms -> participants -> users -> userRoles -> roles

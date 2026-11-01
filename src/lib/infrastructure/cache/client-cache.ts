@@ -241,6 +241,36 @@ class ClientChatCache {
     }
   }
 
+  /**
+   * Drop every cached room and message, in memory and in IndexedDB. Called on
+   * sign-out and whenever a different account signs in on this browser, so the
+   * next person at a shared computer never sees the previous user's chats.
+   */
+  async clearAll() {
+    if (typeof window === "undefined") return;
+    this.memMessages.clear();
+    this.memRooms.clear();
+    this.memLastRead.clear();
+    try {
+      const db = await getDb();
+      await Promise.all([db.messages.clear(), db.roomMetadata.clear()]);
+    } catch (e) {
+      console.warn("Failed to clear IndexedDB cache", e);
+    }
+  }
+
+  /** Clear the cache if it was written by a different account. */
+  async ensureOwner(userId: string) {
+    if (typeof window === "undefined" || !userId) return;
+    const KEY = "komunikasi:cache-owner";
+    let owner: string | null = null;
+    try { owner = localStorage.getItem(KEY); } catch {}
+    if (owner !== userId) {
+      await this.clearAll();
+      try { localStorage.setItem(KEY, userId); } catch {}
+    }
+  }
+
   async invalidate(roomId: string) {
     if (typeof window === "undefined") return;
     try {

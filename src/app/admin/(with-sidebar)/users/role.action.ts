@@ -1,5 +1,7 @@
 "use server";
 
+import { requireAdmin } from "@/lib/auth/actor";
+
 import { PermissionRecord } from "@/lib/entities/models/permission.model";
 import { ServerResponse } from "@/lib/entities/models/response.model";
 import { RoleFullRecord, RoleRecord } from "@/lib/entities/models/role.model";
@@ -12,10 +14,10 @@ import { getRoleByIdController } from "@/lib/interface-adapters/controllers/role
 import { updateRoleController } from "@/lib/interface-adapters/controllers/roles/update-role.controller";
 import { updateUserRolesController } from "@/lib/interface-adapters/controllers/roles/update-user-roles.controller";
 import { deleteUserController } from "@/lib/interface-adapters/controllers/users/delete-user.controller";
-import { adminGuard } from "@/lib/middlewares/role-guard.middleware";
 import { revalidatePath } from "next/cache";
 
 export const getAllUsersWithRoles = async () => {
+  await requireAdmin();
   const users = await getAllUsersWithRolesController();
 
   return users;
@@ -26,19 +28,8 @@ export const deleteUserAction = async (
   targetUserId: string
 ): Promise<ServerResponse<null>> => {
   try {
-    const isAdmin = await adminGuard();
-    if (!isAdmin) {
-      return {
-        status: "error",
-        data: null,
-        error: {
-          type: "UNAUTHORIZED",
-          message: "Hanya admin yang dapat menghapus user",
-        },
-      };
-    }
-
-    await deleteUserController(actorUserId, targetUserId);
+    const adminId = await requireAdmin(actorUserId);
+    await deleteUserController(adminId, targetUserId);
 
     revalidatePath("/admin/users");
 
@@ -66,7 +57,10 @@ export const updateUserRolesAction = async (
   newRole: string[]
 ): Promise<ServerResponse<null>> => {
   try {
-    await updateUserRolesController(actorUserId, targetUserId, newRole);
+    // Previously unguarded and trusting actorUserId: any user could grant
+    // themselves the admin role.
+    const adminId = await requireAdmin(actorUserId);
+    await updateUserRolesController(adminId, targetUserId, newRole);
 
     return {
       status: "success",
@@ -87,11 +81,13 @@ export const updateUserRolesAction = async (
 };
 
 export const getAllRolesAction = async () => {
+  await requireAdmin();
   return await getAllRolesController();
 };
 
 export const getAllPermissionsAction = async (): Promise<ServerResponse<PermissionRecord[]>> => {
   try {
+    await requireAdmin();
     const permission = await getAllPermissionsController();
 
     return {
@@ -114,6 +110,7 @@ export const getAllPermissionsAction = async (): Promise<ServerResponse<Permissi
 
 export const getRoleByIdAction = async (roleId: string): Promise<ServerResponse<RoleFullRecord | null>> => {
   try {
+    await requireAdmin();
     const role = await getRoleByIdController(roleId);
     return {
       status: "success",
@@ -140,6 +137,7 @@ export const createRoleAction = async (
   description?: string
 ): Promise<ServerResponse<null>> => {
   try {
+    await requireAdmin();
     const role = await createRolesController(name, permissions, description);
 
     return {
@@ -167,6 +165,7 @@ export const updateRoleAction = async (
   description?: string
 ): Promise<ServerResponse<null>> => {
   try {
+    await requireAdmin();
     const role = await updateRoleController(roleId, name, permissions, description);
 
     return {
@@ -188,6 +187,7 @@ export const updateRoleAction = async (
 }
 export const deleteRoleAction = async (roleId: string): Promise<ServerResponse<null>> => {
   try {
+    await requireAdmin();
     const role = await deleteRoleController(roleId);
 
     return {

@@ -83,7 +83,7 @@ describe("SendMessageUseCase", () => {
     const result = await useCase.execute("user1", "Hello", "room1")
 
     expect(mockRepo.createMessage).toHaveBeenCalledWith("user1", "Hello", "room1", undefined, undefined)
-    expect(mockPusher.trigger).toHaveBeenCalledWith("chat-room1", "new-message", mockMessage)
+    expect(mockPusher.trigger).toHaveBeenCalledWith("private-chat-room1", "new-message", mockMessage)
     expect(result).toEqual(mockMessage)
   })
 
@@ -108,7 +108,7 @@ describe("SendMessageUseCase", () => {
     )
 
     expect(mockRepo.createMessage).toHaveBeenCalledWith("user1", "Hello with image", "room1", "reply123", attachments)
-    expect(mockPusher.trigger).toHaveBeenCalledWith("chat-room1", "new-message", mockMessage)
+    expect(mockPusher.trigger).toHaveBeenCalledWith("private-chat-room1", "new-message", mockMessage)
     expect(result).toEqual(mockMessage)
   })
 
@@ -168,7 +168,7 @@ describe("SendMessageUseCase", () => {
     )
 
     expect(mockRepo.createMessage).toHaveBeenCalledWith("user1", "Check out this video", "room1", undefined, videoAttachments)
-    expect(mockPusher.trigger).toHaveBeenCalledWith("chat-room1", "new-message", mockMessage)
+    expect(mockPusher.trigger).toHaveBeenCalledWith("private-chat-room1", "new-message", mockMessage)
     expect(result.attachments?.[0].fileType).toBe("video/mp4")
     expect(result).toEqual(mockMessage)
   })
@@ -182,7 +182,7 @@ describe("SendMessageUseCase", () => {
     const result = await useCase.execute("user1", "Hello", "room1", undefined, undefined, optimisticId)
 
     const expectedMessage = { ...mockMessage, optimisticId }
-    expect(mockPusher.trigger).toHaveBeenCalledWith("chat-room1", "new-message", expectedMessage)
+    expect(mockPusher.trigger).toHaveBeenCalledWith("private-chat-room1", "new-message", expectedMessage)
     expect(result.optimisticId).toBe(optimisticId)
   })
 
@@ -273,6 +273,62 @@ describe("SendMessageUseCase", () => {
       await new Promise((r) => setImmediate(r))
 
       expect(mockPushRepo.deleteSubscriptionById).not.toHaveBeenCalled()
+    })
+  })
+
+  describe("idempotent retries", () => {
+    const makeStore = () => ({
+      claim: vi.fn(),
+      complete: vi.fn().mockResolvedValue(undefined),
+      release: vi.fn().mockResolvedValue(undefined),
+    })
+
+    it("creates once and records the message id for the optimisticId", async () => {
+      const store = makeStore()
+      store.claim.mockResolvedValue(null)
+      const mockMessage = { ...baseMessage, user: { username: "user1" } }
+      vi.mocked(mockRepo.createMessage).mockResolvedValue(mockMessage)
+
+      const useCase = new SendMessageUseCase(mockRepo, mockRoomRepo, mockPusher, mockNotifier, mockPushRepo, mockWebPushService, store)
+      await useCase.execute("user1", "Hello", "room1", undefined, undefined, "opt-1")
+
+      expect(store.claim).toHaveBeenCalledWith("send:user1:opt-1", expect.any(Number))
+      expect(store.complete).toHaveBeenCalledWith("send:user1:opt-1", "msg1", expect.any(Number))
+    })
+
+    it("returns the existing message on retry instead of creating a duplicate", async () => {
+      const store = makeStore()
+      store.claim.mockResolvedValue("msg1")
+      const existing = { ...baseMessage, user: { username: "user1" } }
+      ;(mockRepo as any).getMessageById = vi.fn().mockResolvedValue(existing)
+
+      const useCase = new SendMessageUseCase(mockRepo, mockRoomRepo, mockPusher, mockNotifier, mockPushRepo, mockWebPushService, store)
+      const result = await useCase.execute("user1", "Hello", "room1", undefined, undefined, "opt-1")
+
+      expect(mockRepo.createMessage).not.toHaveBeenCalled()
+      expect(mockPusher.trigger).not.toHaveBeenCalled()
+      expect(result).toEqual({ ...existing, optimisticId: "opt-1" })
+    })
+
+    it("releases the claim when creating fails, so the user can retry", async () => {
+      const store = makeStore()
+      store.claim.mockResolvedValue(null)
+      vi.mocked(mockRepo.createMessage).mockRejectedValue(new Error("db down"))
+
+      const useCase = new SendMessageUseCase(mockRepo, mockRoomRepo, mockPusher, mockNotifier, mockPushRepo, mockWebPushService, store)
+      await expect(useCase.execute("user1", "Hello", "room1", undefined, undefined, "opt-1")).rejects.toThrow("db down")
+      expect(store.release).toHaveBeenCalledWith("send:user1:opt-1")
+    })
+
+    it("still sends when the store is unreachable", async () => {
+      const store = makeStore()
+      store.claim.mockRejectedValue(new Error("redis down"))
+      const mockMessage = { ...baseMessage, user: { username: "user1" } }
+      vi.mocked(mockRepo.createMessage).mockResolvedValue(mockMessage)
+      vi.spyOn(console, "error").mockImplementation(() => {})
+
+      const useCase = new SendMessageUseCase(mockRepo, mockRoomRepo, mockPusher, mockNotifier, mockPushRepo, mockWebPushService, store)
+      await expect(useCase.execute("user1", "Hello", "room1", undefined, undefined, "opt-1")).resolves.toEqual({ ...mockMessage, optimisticId: "opt-1" })
     })
   })
 })

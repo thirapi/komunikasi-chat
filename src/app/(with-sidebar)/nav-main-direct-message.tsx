@@ -4,13 +4,12 @@ import { UserAvatar } from "@/components/ui/user-avatar";
 import { Button } from "@/components/ui/button";
 import {
   SidebarGroup,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { Plus, User } from "@phosphor-icons/react/dist/ssr";
+import { Plus, User, CaretDown } from "@phosphor-icons/react/dist/ssr";
 import { usePresence } from "@/components/presence-provider";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
@@ -54,13 +53,21 @@ export function NavMainDirectMessage({
   type,
   user,
   onCreateDirectMessage,
+  openDMDialog: openDMDialogProp,
+  onOpenDMDialogChange: setOpenDMDialogProp,
 }: {
   groups: Groups[];
   type: string;
   user: User;
   onCreateDirectMessage: (userId: string) => Promise<void>;
+  openDMDialog?: boolean;
+  onOpenDMDialogChange?: (open: boolean) => void;
 }) {
-  const [openDMDialog, setOpenDMDialog] = useState(false);
+  const [internalOpenDMDialog, setInternalOpenDMDialog] = useState(false);
+  const openDMDialog = openDMDialogProp ?? internalOpenDMDialog;
+  const setOpenDMDialog = setOpenDMDialogProp ?? setInternalOpenDMDialog;
+  const [isOpen, setIsOpen] = useState(true);
+
   const router = useRouter();
   const pathname = usePathname();
   const { state, isMobile, setOpenMobile } = useSidebar();
@@ -98,129 +105,154 @@ export function NavMainDirectMessage({
 
   return (
     <>
-      <SidebarGroup className="py-1">
-        <SidebarGroupLabel className="px-3 py-2 text-[11px] font-bold tracking-wider text-sidebar-foreground/60 uppercase flex items-center justify-between">
-          <span className="flex items-center gap-1.5">
-            <User weight="bold" className="size-3.5 text-primary" />
-            {type}
-          </span>
-          <div className="flex items-center gap-1">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors rounded-md"
-                    onClick={() => setOpenDMDialog(true)}
-                  >
-                    <Plus weight="duotone" className="size-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p>Buat DM Baru</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-        </SidebarGroupLabel>
-        <SidebarMenu className="gap-1">
-          {groups.length === 0 ? (
-            <SidebarGroup>
-              {!isCollapsed && groups.length === 0 && (
-                <div className="flex flex-col items-center justify-center px-2 py-4 text-xs text-sidebar-foreground/50">
-                  <p className="mb-2 hidden lg:block">
-                    Belum ada percakapan langsung.
-                  </p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setOpenDMDialog(true)}
-                    className="flex items-center justify-center rounded-md"
-                    title="Mulai Percakapan"
-                  >
-                    <Plus weight="duotone" />
-                    <span className="ml-1 lg:inline">
-                      Mulai Percakapan
-                    </span>{" "}
-                  </Button>
-                </div>
-              )}
-            </SidebarGroup>
-          ) : (
-            groups.map((item) => {
-              const isActive = pathname.startsWith(item.url);
-              return (
-                <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActive}
-                    className={cn(
-                      "flex items-center transition-all duration-150 ease-in-out relative group/btn rounded-lg px-2.5",
-                      isCollapsed ? "h-10 justify-center" : "h-12 gap-3",
-                      isActive
-                        ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold shadow-2xs"
-                        : "hover:bg-sidebar-accent/60 text-sidebar-foreground/80 hover:text-sidebar-accent-foreground",
-                    )}
-                    tooltip={item.name}
-                  >
-                    <Link href={item.url}
-                      onClick={() => isMobile && setOpenMobile(false)}
-                      className="flex items-center w-full"
-                    >
-                      {isActive && !isCollapsed && (
-                        <div className="absolute left-0 w-1 h-6 bg-primary rounded-r-full -ml-2.5" />
-                      )}
-                      <div className="relative shrink-0">
-                        <UserAvatar
-                          src={item.avatar}
-                          alt={item.name}
-                          className="h-8 w-8 rounded-lg border border-border/40 shadow-2xs shrink-0"
-                        />
-                        {onlineUserIds.includes(item.userId) && (
-                          <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-sidebar group-hover/btn:bg-sidebar-accent transition-colors">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                          </span>
-                        )}
-                        {item.hasUnread && (
-                          <div className={cn(
-                            "absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-sidebar pointer-events-none flex items-center justify-center",
-                            item.hasMention ? "bg-red-500 scale-110 z-10" : "bg-primary"
-                          )}>
-                            {item.hasMention && <span className="text-[7px] text-white font-bold leading-none">@</span>}
-                          </div>
-                        )}
-                      </div>
+      <SidebarGroup className="p-0">
+        {/* Desktop Section Header with Collapsible Toggle and Action */}
+        {!isMobile && (
+          <div className="px-2 py-1.5 flex items-center justify-between group/header">
+            <button
+              type="button"
+              onClick={() => setIsOpen((prev) => !prev)}
+              className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/75 hover:text-foreground transition-colors select-none"
+            >
+              <CaretDown
+                weight="bold"
+                className={cn("size-3 transition-transform duration-200", !isOpen && "-rotate-90")}
+              />
+              <span className="flex items-center gap-1.5">
+                <User weight="bold" className="size-3 text-primary" />
+                {type}
+                <span className="text-[10px] font-medium text-muted-foreground/60">
+                  ({groups.length})
+                </span>
+              </span>
+            </button>
 
-                      {!isCollapsed && (
-                        <div className="flex flex-col flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-1.5">
-                            <span className={cn("truncate text-xs font-semibold tracking-tight leading-tight", item.hasUnread ? "text-foreground font-bold" : "text-sidebar-foreground/90")}>
-                              {item.name}
-                            </span>
-                            {item.lastMessageTime && (
-                              <span className="text-[10px] text-muted-foreground/70 shrink-0 font-normal">
-                                {formatTime(item.lastMessageTime)}
-                              </span>
-                            )}
-                          </div>
-                          {item.lastMessage && (
-                            <span className={cn(
-                              "text-[11px] truncate leading-tight mt-0.5",
-                              item.hasUnread ? "text-foreground/90 font-medium" : "text-muted-foreground/70"
-                            )}>
-                              {renderLastMessage(item.lastMessage)}
-                            </span>
+            <div className="flex items-center gap-0.5 opacity-0 group-hover/header:opacity-100 transition-opacity">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-6 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors rounded-md"
+                      onClick={() => setOpenDMDialog(true)}
+                    >
+                      <Plus weight="bold" className="size-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    <p>Mulai Percakapan</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          </div>
+        )}
+
+        {/* Menu items rendered when open (always visible on mobile) */}
+        {(isMobile || isOpen) && (
+          <SidebarMenu className="gap-0.5 px-1">
+            {groups.length === 0 ? (
+              <div className="flex flex-col items-center justify-center px-3 py-6 text-xs text-muted-foreground/60 text-center">
+                <p className="mb-2">Belum ada percakapan langsung</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setOpenDMDialog(true)}
+                  className="h-7 text-xs rounded-lg gap-1.5"
+                >
+                  <Plus weight="bold" className="size-3" />
+                  Mulai Percakapan
+                </Button>
+              </div>
+            ) : (
+              groups.map((item) => {
+                const isActive = pathname.startsWith(item.url);
+                return (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive}
+                      className={cn(
+                        "flex items-center transition-all duration-150 ease-in-out relative group/btn rounded-md px-2",
+                        isCollapsed ? "h-10 justify-center" : "h-12",
+                        isActive
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                          : "hover:bg-sidebar-accent/50 text-sidebar-foreground/80 hover:text-sidebar-accent-foreground",
+                      )}
+                      tooltip={item.name}
+                    >
+                      <Link
+                        href={item.url}
+                        onClick={() => isMobile && setOpenMobile(false)}
+                        className={cn(
+                          "flex items-center w-full",
+                          isCollapsed ? "justify-center p-0" : "gap-3",
+                        )}
+                      >
+                        <div className="relative shrink-0">
+                          <UserAvatar
+                            src={item.avatar}
+                            alt={item.name}
+                            className="h-8 w-8 rounded-full shrink-0"
+                          />
+                          {onlineUserIds.includes(item.userId) && (
+                            <span className="absolute -bottom-px -right-px h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-sidebar" />
+                          )}
+                          {isCollapsed && item.hasUnread && (
+                            <span
+                              className={cn(
+                                "absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-sidebar pointer-events-none",
+                                item.hasMention ? "bg-rose-500" : "bg-foreground"
+                              )}
+                            />
                           )}
                         </div>
-                      )}
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              );
-            })
-          )}
-        </SidebarMenu>
+
+                        {!isCollapsed && (
+                          <div className="flex flex-col flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-1.5">
+                              <span
+                                className={cn(
+                                  "truncate text-[13px] leading-tight",
+                                  item.hasUnread ? "text-foreground font-semibold" : "font-medium text-sidebar-foreground/90"
+                                )}
+                              >
+                                {item.name}
+                              </span>
+                              {item.lastMessageTime && (
+                                <span className="text-[11px] text-muted-foreground shrink-0 tabular-nums">
+                                  {formatTime(item.lastMessageTime)}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5 min-w-0">
+                              <span
+                                className={cn(
+                                  "flex-1 text-xs truncate leading-tight",
+                                  item.hasUnread ? "text-foreground/90" : "text-muted-foreground"
+                                )}
+                              >
+                                {item.lastMessage ? renderLastMessage(item.lastMessage) : null}
+                              </span>
+                              {item.hasMention ? (
+                                <span className="shrink-0 h-4 min-w-4 px-1 rounded-full bg-rose-500 text-white text-[10px] font-semibold leading-4 text-center" aria-label="Kamu disebut">
+                                  @
+                                </span>
+                              ) : item.hasUnread ? (
+                                <span className="shrink-0 h-2 w-2 rounded-full bg-foreground/80" aria-label="Belum dibaca" />
+                              ) : null}
+                            </div>
+                          </div>
+                        )}
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })
+            )}
+          </SidebarMenu>
+        )}
       </SidebarGroup>
       <DirectMessageDialog
         open={openDMDialog}

@@ -1,35 +1,35 @@
-import { getRoom, joinRoom } from "@/app/(with-sidebar)/channels/[roomId]/room.action";
 import { getUserSession } from "@/app/auth.action";
+import { getImpersonatedUserId } from "@/lib/impersonate.guard";
+import { getRoomAccess } from "@/lib/auth/actor";
+import { joinRoomController } from "@/lib/interface-adapters/controllers/rooms/join-room.controller";
 import { redirect } from "next/navigation";
 
+/**
+ * Invite link: /join/<roomId>. Holding the link is what grants access, so this
+ * runs entirely on the server (no public server action) and works for private
+ * channels too. Direct messages can never be joined this way.
+ */
 export default async function JoinRoomPage({
   params,
 }: {
   params: Promise<{ roomId: string }>;
 }) {
   const { roomId } = await params;
-  const user = await getUserSession();
+  const session = await getUserSession();
+  const userId = session?.user?.id;
 
-  if (!user) {
+  if (!userId) {
     redirect(`/?callbackUrl=/join/${roomId}`);
   }
 
-
-  // Check if room exists
-  const roomResponse = await getRoom(roomId);
-  if (!roomResponse.data) {
-    redirect("/channels");
+  const access = await getRoomAccess(roomId, userId);
+  if (!access.exists || access.isDirect) {
+    redirect("/channels/default");
   }
 
-  // Join the room if not already a member
-  const isMember = roomResponse.data.participants.some(
-    (p) => p.user.id === user.user?.id
-  );
-
-  if (!isMember && user.user) {
-    await joinRoom(roomId, user.user.id);
+  if (!access.isMember && !(await getImpersonatedUserId())) {
+    await joinRoomController(roomId, userId);
   }
 
-  // Redirect to the channel
   redirect(`/channels/${roomId}`);
 }

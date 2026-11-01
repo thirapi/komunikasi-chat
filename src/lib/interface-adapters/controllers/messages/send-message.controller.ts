@@ -10,6 +10,7 @@ import { RoomRepository } from "@/lib/infrastructure/repositories/room.repositor
 import { DiscordNotifierService } from "@/lib/infrastructure/services/discord-notifier.service";
 import { PushSubscriptionRepository } from "@/lib/infrastructure/repositories/push-subscription.repository";
 import { WebPushService } from "@/lib/infrastructure/services/web-push.service";
+import { UpstashIdempotencyStore } from "@/lib/infrastructure/services/upstash-idempotency.service";
 
 const messageRepository = new MessageRepository(db);
 const roomRepository = new RoomRepository(db)
@@ -24,20 +25,25 @@ const sendMessageUseCase = new SendMessageUseCase(
     pusherService,
     discordNotifierService,
     pushSubscriptionRepository,
-    webPushService
+    webPushService,
+    new UpstashIdempotencyStore()
 );
 
 const formSchema = z.object({
-    content: z.string(),
-    roomId: z.string(),
+    content: z.string().max(8000, "Pesan terlalu panjang"),
+    roomId: z.string().min(1),
     attachments: z.array(z.object({
-        url: z.string(),
+        // Only http(s) URLs: these are rendered as <img>/<video>/<a href>.
+        url: z.string().url().refine((u) => /^https?:\/\//i.test(u), "URL lampiran tidak valid"),
         key: z.string(),
         fileType: z.string(),
         size: z.number().optional(),
-    })).optional(),
+    })).max(10).optional(),
     replyTo: z.string().optional(),
-    optimisticId: z.string().optional(),
+    optimisticId: z.string().max(64).optional(),
+}).refine((v) => v.content.trim().length > 0 || (v.attachments?.length ?? 0) > 0, {
+    message: "Pesan kosong",
+    path: ["content"],
 });
 
 export const sendMessageController = async (
