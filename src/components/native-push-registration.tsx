@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { PushNotifications } from "@capacitor/push-notifications";
 import { isNative, platform } from "@/lib/native/platform";
 import { saveFcmTokenAction } from "@/app/push.action";
+import { whenSignedIn } from "@/lib/session-signal";
 
 /**
  * Registers the native Android app for Firebase Cloud Messaging push.
@@ -20,7 +21,9 @@ export function NativePushRegistration() {
 
     let cancelled = false;
 
-    (async () => {
+    // The token is saved for the signed-in user, so wait for login (this
+    // component lives in the root layout and also renders on the login page).
+    const stopWaiting = whenSignedIn(() => void (async () => {
       try {
         const permission = await PushNotifications.requestPermissions();
         if (permission.receive !== "granted" || cancelled) return;
@@ -48,10 +51,11 @@ export function NativePushRegistration() {
           e,
         );
       }
-    })();
+    })());
 
     return () => {
       cancelled = true;
+      stopWaiting();
     };
   }, []);
 
