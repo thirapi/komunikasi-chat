@@ -67,11 +67,11 @@ export function SignUpForm({
   const password = form.watch("password");
 
   return (
-    <div className={cn("flex flex-col gap-8", className)} {...props}>
+    <div className={cn("flex flex-col gap-6 sm:gap-8", className)} {...props}>
       <AuthHeading
         eyebrow="Daftar"
         title="Buat akun baru"
-        description="Cukup username dan password — setelah itu kamu langsung masuk."
+        description="Cuma perlu username dan password. Setelah itu kamu langsung masuk."
       />
 
       <Form {...form}>
@@ -87,7 +87,7 @@ export function SignUpForm({
                     autoComplete="username"
                     autoCapitalize="none"
                     spellCheck={false}
-                    placeholder="namakamu"
+                    placeholder="budi_santoso"
                     className={authInputClass}
                     autoFocus
                     {...field}
@@ -118,7 +118,7 @@ export function SignUpForm({
             render={({ field }) => (
               <FormItem className="auth-rise" style={{ ["--i" as string]: 5 }}>
                 <FormLabel>Ulangi password</FormLabel>
-                <PasswordField autoComplete="new-password" placeholder="Ketik ulang password" {...field} />
+                <PasswordField autoComplete="new-password" placeholder="Ketik password yang sama" {...field} />
                 <FormMessage />
               </FormItem>
             )}

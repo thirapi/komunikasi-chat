@@ -6,12 +6,12 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Komunikasi",
-  description: "Komunikasi adalah platform pesan instan modern yang dirancang untuk kecepatan, keamanan, dan produktivitas. Hubungkan tim Anda dan berbagi ide dengan lancar.",
+  description: "Aplikasi chat dengan channel untuk grup dan pesan pribadi antar pengguna. Pesan masuk langsung tanpa perlu refresh.",
   keywords: ["chat", "real-time", "komunikasi", "pesan instan", "kolaborasi", "platform chat", "aman"],
   authors: [{ name: "Thirafi" }],
   openGraph: {
     title: "Komunikasi",
-    description: "Hubungkan tim Anda dan berbagi ide dengan lancar di platform komunikasi masa depan.",
+    description: "Channel buat ramai-ramai, DM buat yang pribadi.",
     url: "https://komunikasi.qzz.io",
     siteName: "Komunikasi",
     locale: "id_ID",
@@ -38,7 +38,7 @@ export default async function House() {
             "@type": "WebApplication",
             name: "Komunikasi",
             url: "https://komunikasi.qzz.io",
-            description: "Platform pesan instan modern untuk kolaborasi tim.",
+            description: "Aplikasi chat dengan channel dan pesan pribadi.",
             applicationCategory: "CommunicationApplication",
           }),
         }}

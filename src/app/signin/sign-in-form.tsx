@@ -53,11 +53,11 @@ export function SignInForm({
   };
 
   return (
-    <div className={cn("flex flex-col gap-8", className)} {...props}>
+    <div className={cn("flex flex-col gap-6 sm:gap-8", className)} {...props}>
       <AuthHeading
         eyebrow="Masuk"
         title="Selamat datang kembali"
-        description="Masuk dengan username dan password akunmu."
+        description="Pakai akun yang kamu buat waktu daftar."
       />
 
       <Form {...form}>
@@ -73,7 +73,7 @@ export function SignInForm({
                     autoComplete="username"
                     autoCapitalize="none"
                     spellCheck={false}
-                    placeholder="namakamu"
+                    placeholder="budi_santoso"
                     className={authInputClass}
                     autoFocus
                     {...field}
@@ -90,7 +90,7 @@ export function SignInForm({
             render={({ field }) => (
               <FormItem className="auth-rise" style={{ ["--i" as string]: 4 }}>
                 <FormLabel>Password</FormLabel>
-                <PasswordField autoComplete="current-password" {...field} />
+                <PasswordField autoComplete="current-password" placeholder="Password akunmu" {...field} />
                 <FormMessage />
               </FormItem>
             )}

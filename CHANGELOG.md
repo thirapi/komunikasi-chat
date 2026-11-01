@@ -7,6 +7,95 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [Unreleased]
+
+### Added
+
+#### Direct uploads to R2, attach menu and drag-and-drop
+
+Vercel caps function request bodies at ~4.5 MB, so larger attachments always
+failed. The browser now asks for a short-lived presigned PUT URL (session,
+folder, type and size checked; type and size are part of the signature) and
+uploads straight to R2 with progress on the message. Small files fall back to
+the server upload. Avatars and banners use the same path. The attach button
+opens a menu (Photos & videos / Documents), and files can be dropped anywhere
+on the conversation.
+
+#### Composer and chat
+
+- Code pasted from VS Code, or text that clearly looks like code, is wrapped in
+  a fenced code block (Ctrl/Cmd+Z restores the plain paste).
+- Ctrl/Cmd+F searches the open room; Ctrl/Cmd+K is the global search.
+- Reply quotes, quick-reaction toolbar, mention highlight, sending/failed
+  states with retry and discard, connection status in the header.
+
+### Changed
+
+#### Login and sign-up
+
+The marketing landing page became a split-screen login shared by `/`,
+`/signin` and `/signup`: the ASCII art in an inset panel with a dot-matrix
+(Doto) wordmark, the form on the other side.
+
+- The Doto wordmark is now the only brand on the page; the logo and name in
+  the form header repeated it, and on mobile the two sat stacked on top of
+  each other.
+- Copy rewritten in plain Indonesian; placeholders show a real example
+  (`budi_santoso`) instead of `namakamu`, and the login password field has one.
+- Mobile: the page could not scroll, so on short phones the sign-up form was
+  cut off below the password field. The shell now grows with its content.
+  Login fits one screen down to 360×640; the header's sign-up link (repeated
+  under the form) is hidden below `lg`, and the description and footer drop on
+  screens shorter than 700px.
+- Sign-in no longer waits on IP geolocation; audit logs and session writes are
+  deferred. New accounts are signed in straight after sign-up.
+
+#### Chat redesign
+
+Rooms switch on the client from cache with per-room scroll restore; the
+sidebar, search and dialogs were restyled consistently with live previews and
+simpler unread/mention indicators.
+
+### Fixed
+
+#### Opening a chat, unread state and auto-scroll
+
+- Opening a room fetched room, messages and read position with three
+  sequential server actions (Next.js runs them one at a time), so a room first
+  showed its stale cached view. One `getRoomSnapshot` action now, and messages
+  for rooms that are not open are written into the cache as they arrive.
+- The read update was debounced with the *last* call winning, often an older
+  message, so the room came back unread. The furthest message now wins and the
+  write cannot be starved by a busy room.
+- `router.refresh` no longer overwrites newer local read state with a stale
+  server snapshot; reaching the newest message always clears the sidebar dot.
+- The unread separator no longer flashes on messages arriving in an open room.
+- The sidebar mention badge never cleared: `createdAt` has microsecond
+  precision while `lastReadAt` is written from a JS Date. Compared at
+  millisecond precision now.
+- `flex-col-reverse` only holds the bottom at `scrollTop` 0; a few pixels off
+  and new messages landed below the fold while being marked read. The view now
+  stays pinned while the reader is at the bottom.
+
+#### Security
+
+- Server actions derived the user from client-sent ids, which allowed acting
+  as any user. Identity now comes from the session, with room membership
+  checks on reads and writes, admin-only admin actions and private Pusher
+  channels authorized by membership.
+- User-typed HTML in messages was rendered (`rehype-raw`); it is now escaped
+  and sanitised.
+- Open redirect through protocol-relative `callbackUrl`s.
+
+#### Other
+
+- Push notifications only register after sign-in (web push failed with "no
+  active Service Worker", native FCM tokens were rejected before login).
+- Opening a chat from the profile or settings page changed the URL but kept
+  the old page.
+
+---
+
 ## [1.0.1] — 2026-10-07
 
 Hardening pass on the Android shell plus the branding that `1.0.0` shipped

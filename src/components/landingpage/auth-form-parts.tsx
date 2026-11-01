@@ -17,10 +17,11 @@ export function AuthHeading({ eyebrow, title, description }: { eyebrow: string; 
       <p className="auth-rise font-mono text-[11px] uppercase tracking-[0.22em] text-primary" style={{ ["--i" as string]: 0 }}>
         {eyebrow}
       </p>
-      <h1 className="auth-rise font-brand text-[1.85rem] font-semibold leading-tight tracking-tight" style={{ ["--i" as string]: 1 }}>
+      <h1 className="auth-rise font-brand text-[1.6rem] font-semibold sm:text-[1.85rem] leading-tight tracking-tight" style={{ ["--i" as string]: 1 }}>
         {title}
       </h1>
-      <p className="auth-rise text-sm leading-relaxed text-muted-foreground" style={{ ["--i" as string]: 2 }}>
+      {/* Dropped on short phones so the whole form fits without scrolling. */}
+      <p className="auth-rise text-sm leading-relaxed text-muted-foreground max-lg:[@media(max-height:700px)]:hidden" style={{ ["--i" as string]: 2 }}>
         {description}
       </p>
     </div>
