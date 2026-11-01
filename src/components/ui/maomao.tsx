@@ -13,7 +13,20 @@ import { useEffect, useRef } from "react"
 // hotlinked from assets.21st.dev, so the login page does not depend on a third
 // party staying up or keeping the URL. With prefers-reduced-motion the video
 // stays paused on the poster frame.
-export function AsciiArt({ className }: { className?: string }) {
+export function AsciiArt({
+  className,
+  fill = true,
+}: {
+  className?: string
+  /**
+   * true (default): stretch to the parent with object-fit: cover.
+   * false: leave sizing to `className` (e.g. a pan that sizes the video by
+   * its own aspect ratio). A prop rather than a style override, because
+   * `undefined` style keys are dropped when a Server Component passes props
+   * to this Client Component, so they cannot clear the defaults.
+   */
+  fill?: boolean
+}) {
   const ref = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
@@ -41,12 +54,11 @@ export function AsciiArt({ className }: { className?: string }) {
       playsInline
       preload="auto"
       aria-label="maomao — animated ASCII art"
-      style={{
-        display: "block",
-        width: "100%",
-        height: "100%",
-        objectFit: "cover",
-      }}
+      style={
+        fill
+          ? { display: "block", width: "100%", height: "100%", objectFit: "cover" }
+          : { display: "block" }
+      }
     />
   )
 }

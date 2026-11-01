@@ -19,10 +19,12 @@ export function AuthShell({
 }) {
   return (
     <div className="grid min-h-dvh grid-rows-[auto_1fr] lg:grid-cols-[1.15fr_1fr] lg:grid-rows-1">
-      <div className="relative h-56 overflow-hidden bg-black sm:h-72 lg:h-auto">
-        {/* Slight scale hides a dark 1px seam baked into the video's right
-            edge; on the short mobile band, bias the crop towards the face. */}
-        <AsciiArt className="absolute inset-0 scale-[1.02] object-[50%_18%] lg:object-center" />
+      {/* The art is portrait and taller than this panel at every size, so it
+          pans top → bottom → top instead of being cropped. See .ascii-pan in
+          globals.css. fill={false} lets that class size the video by its own
+          aspect ratio instead of stretching it to the panel. */}
+      <div className="ascii-pan-frame relative h-56 overflow-hidden bg-black sm:h-72 lg:h-auto">
+        <AsciiArt className="ascii-pan" fill={false} />
       </div>
 
       <div className="flex flex-col bg-background">

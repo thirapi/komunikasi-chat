@@ -344,3 +344,52 @@
 .fediverse-content .invisible {
   display: none;
 }
+
+/*
+ * Login art pan (auth-shell.tsx). The portrait video (644×928) is wider-cropped
+ * than its panel, so instead of hiding the top and bottom it drifts slowly
+ * top → bottom → top.
+ *
+ * Smoothness choices:
+ * - transform only (translate3d), so it runs on the compositor with sub-pixel
+ *   positioning and never triggers layout or repaint of the page;
+ * - easeInOutSine with `alternate`, so velocity eases to zero at both ends and
+ *   there is no jolt at the turnarounds;
+ * - distance is computed by CSS from container units (100cqh − own height),
+ *   so it fits any viewport without JavaScript or resize listeners.
+ * The video is sized to cover: at least the panel width (+4px to push a dark
+ * 1px seam baked into its right edge out of view) and at least the height a
+ * portrait frame needs to fill the panel.
+ */
+.ascii-pan-frame {
+  container-type: size;
+}
+
+.ascii-pan {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: max(calc(100cqw + 4px), calc(100cqh * 644 / 928));
+  /* Tailwind preflight caps video at max-width: 100%, which silently clamped
+     the width above back to the panel width on tall, narrow panels. */
+  max-width: none;
+  aspect-ratio: 644 / 928;
+  transform: translate3d(-50%, calc((100cqh - 100%) / 2), 0);
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ascii-pan {
+    animation: ascii-pan 24s cubic-bezier(0.37, 0, 0.63, 1) infinite alternate;
+  }
+}
+
+@keyframes ascii-pan {
+  from {
+    transform: translate3d(-50%, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, calc(100cqh - 100%), 0);
+  }
+}
