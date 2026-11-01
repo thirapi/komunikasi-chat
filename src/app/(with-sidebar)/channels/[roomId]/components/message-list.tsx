@@ -4,8 +4,7 @@ import {
   MessageWithUserDTO,
 } from "@/lib/entities/models/message.model";
 import { MessageItem } from "./message-item";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChatTeardropText, Hash, CircleNotch } from "@phosphor-icons/react/dist/ssr";
+import { Hash, CircleNotch } from "@phosphor-icons/react/dist/ssr";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { DateSeparator } from "./date-separator";
 import { UnreadSeparator } from "./unread-separator";
@@ -36,6 +35,8 @@ export function MessageList({
   roomData,
   highlightedMessageId,
   onScrollToMessage,
+  onRetrySend,
+  onDiscardSend,
 }: {
   messages: MessageWithUserDTO[];
   bottomRef: React.RefObject<HTMLDivElement | null>;
@@ -57,6 +58,8 @@ export function MessageList({
   roomData: RoomWithParticipantsDTO;
   highlightedMessageId?: string | null;
   onScrollToMessage?: (messageId: string) => void;
+  onRetrySend?: (message: MessageWithUserDTO) => void;
+  onDiscardSend?: (message: MessageWithUserDTO) => void;
 }) {
   // --- UNREAD SEPARATOR LOGIC ---
   // We want the separator to stay at its INITIAL position when the user entered.
@@ -167,7 +170,7 @@ export function MessageList({
             {showDateSeparator && index > 0 && (
               <motion.div
                 key={`date-${msg.id}`}
-                initial={{ opacity: 0, y: -10 }}
+                initial={false}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95 }}
               >
@@ -215,73 +218,90 @@ export function MessageList({
           isAfterSeparator={(showDateSeparator && index > 0) || showUnreadAndDate || (!showDateSeparator && !showUnreadAndDate && isInitialUnread)}
           isHighlighted={msg.id === highlightedMessageId}
           onScrollToMessage={onScrollToMessage}
+          onRetrySend={onRetrySend}
+          onDiscardSend={onDiscardSend}
           roomData={roomData}
         />
       </div>
     );
   });
 
+  const partner = roomData.isDirect
+    ? roomData.participants.find((p: any) => p.user.id !== userId)?.user
+    : null;
+
   return (
     <div
       ref={viewportRef}
-      className="h-full w-full overflow-y-auto overflow-x-hidden flex flex-col-reverse px-4 pt-3 scrollbar-thin overflow-anchor-auto"
+      className="h-full w-full overflow-y-auto overflow-x-hidden flex flex-col-reverse pt-2 overflow-anchor-auto"
     >
-      <div ref={bottomRef} className="h-4 shrink-0" />
+      <div ref={bottomRef} className="h-3 shrink-0" />
       {nodes.reverse()}
 
-      {/* Header and Load More button are at the very end of the flex-col-reverse -> visual top */}
+      {/* Header and Load More are last in the flex-col-reverse -> visual top */}
       {!hasMore && (
-        <div className="flex flex-col items-start px-4 pt-8 pb-4 space-y-4 shrink-0">
-          <UserAvatar
-            src={roomData.isDirect
-              ? (roomData.participants.find((p: any) => p.user.id !== userId)?.user.avatar || "/avatars/avatar1.png")
-              : (roomData.avatar || "/avatars/avatar6.png")
-            }
-            alt={roomData.isDirect
-              ? roomData.participants.find((p: any) => p.user.id !== userId)?.user.username
-              : roomData.name
-            }
-            className="h-16 w-16 rounded-2xl shadow-sm border-2 border-background"
-          />
-          <div className="space-y-1">
-            <h1 className="text-3xl font-bold tracking-tight">
-              Welcome to #{roomData.isDirect ? (roomData.participants.find((p: any) => p.user.id !== userId)?.user.username) : roomData.name}!
-            </h1>
-            <p className="text-muted-foreground">
-              This is the start of the #{roomData.isDirect ? (roomData.participants.find((p: any) => p.user.id !== userId)?.user.username) : roomData.name} channel.
-            </p>
-          </div>
-          {messages.length > 0 && (
-            <div className="w-full">
-              <DateSeparator date={new Date(messages[0].createdAt)} />
+        <div className="px-4 pt-10 pb-2 shrink-0">
+          {roomData.isDirect ? (
+            <UserAvatar
+              src={partner?.avatar || "/avatars/avatar1.png"}
+              alt={partner?.username || "Pengguna"}
+              className="h-16 w-16 rounded-full"
+            />
+          ) : roomData.avatar ? (
+            <UserAvatar
+              src={roomData.avatar}
+              alt={roomData.name}
+              className="h-16 w-16 rounded-xl"
+            />
+          ) : (
+            <div className="h-16 w-16 rounded-xl bg-muted flex items-center justify-center">
+              <Hash weight="bold" className="h-8 w-8 text-muted-foreground" />
             </div>
           )}
-          {messages.length === 0 && (
-            <div className="w-full pt-4 opacity-50 italic text-[11px]">
-              Belum ada pesan di sini. Jadilah yang pertama!
+
+          <h1 className="mt-3 text-2xl font-semibold tracking-tight text-foreground">
+            {roomData.isDirect
+              ? partner?.name || partner?.username || "Pengguna"
+              : `#${roomData.name}`}
+          </h1>
+          {roomData.isDirect && partner?.username && (
+            <p className="text-sm text-muted-foreground">@{partner.username}</p>
+          )}
+          <p className="mt-2 text-sm text-muted-foreground max-w-lg">
+            {roomData.isDirect
+              ? <>Ini awal percakapanmu dengan <span className="font-medium text-foreground">{partner?.name || partner?.username}</span>.</>
+              : <>Ini awal channel <span className="font-medium text-foreground">#{roomData.name}</span>.{roomData.description ? ` ${roomData.description}` : ""}</>}
+          </p>
+
+          {messages.length > 0 ? (
+            <div className="-mx-4 mt-4">
+              <DateSeparator date={new Date(messages[0].createdAt)} />
             </div>
+          ) : (
+            <p className="mt-6 text-sm text-muted-foreground">
+              Belum ada pesan di sini.
+            </p>
           )}
         </div>
       )}
 
       {hasMore && (
-        <div ref={loadMoreRef} className="flex justify-center py-4 shrink-0 mt-4 h-16">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onLoadMore}
-            disabled={isLoadingMore}
-            className="text-xs text-muted-foreground hover:text-primary"
-          >
-            {isLoadingMore ? (
-              <>
-                <CircleNotch weight="duotone" className="mr-2 h-3 w-3 animate-spin" />
-                Memuat...
-              </>
-            ) : (
-              "Memuat pesan lama..."
-            )}
-          </Button>
+        <div ref={loadMoreRef} className="flex justify-center items-center py-6 shrink-0">
+          {isLoadingMore ? (
+            <span className="flex items-center gap-2 text-xs text-muted-foreground">
+              <CircleNotch className="h-3.5 w-3.5 animate-spin" />
+              Memuat pesan sebelumnya…
+            </span>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onLoadMore}
+              className="h-7 text-xs text-muted-foreground hover:text-foreground"
+            >
+              Muat pesan sebelumnya
+            </Button>
+          )}
         </div>
       )}
     </div>

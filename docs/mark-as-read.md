@@ -23,7 +23,7 @@ Untuk memberikan pengalaman yang mulus dan mencegah separator unread "meloncat" 
 
 ### 4. Sinkronisasi Antar Perangkat (Multi-device Sync)
 Status "sudah dibaca" disinkronkan di semua tab atau perangkat user yang sedang aktif.
-- **Backend (`UpdateLastReadAtUseCase.ts`)**: Setelah database berhasil diupdate, server akan mengirim event `room-marked-read` ke channel pribadi user (`user-{userId}`).
+- **Backend (`UpdateLastReadAtUseCase.ts`)**: Setelah database berhasil diupdate, server akan mengirim event `room-marked-read` ke channel privat user (`private-user-{userId}`, lihat `lib/pusher/channels.ts`).
 - **Frontend**: `RealtimeNotificationListener.tsx` mendengarkan event ini dan memanggil `markAsRead(roomId)` pada `UnreadProvider` lokal, sehingga indikator unread di sidebar hilang secara otomatis di tab lain.
 
 ### 4. Sidebar Unread Logic & UI Alignment
@@ -34,6 +34,16 @@ Untuk menjaga konsistensi antara tampilan chat dan sidebar:
     - **Position**: Indikator unread (dot merah) diletakkan di pojok kanan atas avatar (`-top-0.5 -right-0.5`).
     - **Consistency**: Posisi ini seragam baik dalam mode expanded maupun collapsed.
     - **Visual**: Animasi pulse dihilangkan untuk tampilan yang lebih bersih.
+
+### 5. Hanya dibaca saat benar-benar terlihat
+- `markAsRead` di `chat-room.tsx` ditunda bila tab tidak terlihat atau window tidak fokus. Permintaan disimpan (`pendingReadRef`) dan dijalankan saat user kembali (`focus` / `visibilitychange`), hanya untuk pesan yang memang ada di layar.
+- Bila room sedang terbuka tetapi tab di background, `RealtimeNotificationListener` tetap memanggil `markAsUnread` (tanpa bunyi kedua) sehingga sidebar dan judul tab ikut menandai.
+
+### 6. Sidebar live & judul tab
+- `UnreadProvider.recordActivity` menyimpan preview & waktu pesan terakhir per room dari event realtime (pesan orang lain via `new-message-notification`, pesan di room yang terbuka termasuk milik sendiri via `chat-room`). Sidebar memakai data ini bila lebih baru dari data server, sehingga preview, waktu, dan urutan berubah tanpa refresh. Format preview mengikuti `get-sidebar-data.use-case.ts` (lihat `lib/chat/message-preview.ts`).
+- Flag mention dikirim saat realtime: `markAsUnread(roomId, mentionsMe)`.
+- Pesan dari room yang belum ada di sidebar (DM baru, baru diundang) memicu `router.refresh()` sekali per room.
+- Judul tab menampilkan jumlah room unread: `(3) Komunikasi`.
 
 ## Aturan Pengembangan (Guardrails)
 1. **Prioritas Kebenaran (Timestamp-First)**: Selalu gunakan `lastReadAt` (timestamp) sebagai *Primary Source of Truth*. Update hanya dilakukan jika timestamp baru **lebih besar** (lebih baru) dari yang tersimpan. Hal ini mencegah *stale data* dari server menimpa update lokal yang cepat.

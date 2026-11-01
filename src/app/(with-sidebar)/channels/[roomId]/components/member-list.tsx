@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import {
   HoverCard,
@@ -87,85 +87,122 @@ export function MemberList({
   const [showInvite, setShowInvite] = useState(false);
   const isOwner = currentUserId === roomData.ownerId;
 
+  const onlineParticipants = useMemo(() => {
+    return roomData.participants.filter((p) => onlineUserIds.includes(p.user.id));
+  }, [roomData.participants, onlineUserIds]);
+
+  const offlineParticipants = useMemo(() => {
+    return roomData.participants.filter((p) => !onlineUserIds.includes(p.user.id));
+  }, [roomData.participants, onlineUserIds]);
+
+  const renderParticipant = (participant: any, isParticipantOnline: boolean) => {
+    const isParticipantOwner = participant.user.id === roomData.ownerId;
+    return (
+      <li key={participant.user.id} className="group flex items-center gap-2.5 w-full px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors">
+        <ProfileHoverCard
+          user={{
+            id: participant.user.id,
+            username: participant.user.username,
+            avatar: participant.user.avatar,
+            banner: participant.user.banner,
+            bio: participant.user.bio,
+            customStatus: participant.user.customStatus,
+          }}
+          isOnline={isParticipantOnline}
+          currentUserId={currentUserId}
+          onStartDM={handleStartDM}
+          side="left"
+        >
+          <div className={cn("relative cursor-pointer shrink-0", !isParticipantOnline && "opacity-50")}>
+            <UserAvatar
+              src={participant.user.avatar}
+              alt={participant.user.username}
+              className="h-8 w-8 rounded-full"
+            />
+            {isParticipantOnline && (
+              <div className="absolute -bottom-px -right-px h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-background" />
+            )}
+          </div>
+        </ProfileHoverCard>
+
+        <ProfileHoverCard
+          user={{
+            id: participant.user.id,
+            username: participant.user.username,
+            avatar: participant.user.avatar,
+            banner: participant.user.banner,
+            bio: participant.user.bio,
+            customStatus: participant.user.customStatus,
+          }}
+          isOnline={isParticipantOnline}
+          currentUserId={currentUserId}
+          onStartDM={handleStartDM}
+          side="left"
+        >
+          <div className="flex flex-col min-w-0 flex-1 cursor-pointer">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span
+                className={cn(
+                  "text-[13px] font-medium truncate",
+                  isParticipantOnline ? "text-foreground" : "text-muted-foreground"
+                )}
+              >
+                {participant.user.name || participant.user.username}
+              </span>
+              {isParticipantOwner && (
+                <Crown weight="fill" className="size-3 text-amber-500 shrink-0" aria-label="Pemilik" />
+              )}
+            </div>
+            {participant.user.customStatus && (
+              <span className="text-[11px] text-muted-foreground truncate leading-tight">
+                {participant.user.customStatus}
+              </span>
+            )}
+          </div>
+        </ProfileHoverCard>
+      </li>
+    );
+  };
+
   return (
     <>
-      <aside className="w-64 h-full border-l border-border pt-4 pb-2 px-4 hidden lg:flex flex-col bg-card/30">
-        <div className="flex items-center justify-between mb-4 shrink-0 px-1">
-          <h3 className="text-sm font-medium text-muted-foreground">
-            Anggota — {roomData.participants.length}
+      <aside className="w-60 h-full border-l border-border pt-3 pb-2 px-2 hidden lg:flex flex-col bg-background shrink-0">
+        <div className="flex items-center justify-between mb-2 shrink-0 px-2 py-1">
+          <h3 className="text-xs font-medium text-muted-foreground">
+            Anggota · {roomData.participants.length}
           </h3>
           {isOwner && (
             <button
               onClick={() => setShowInvite(true)}
-              className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors"
+              className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
               title="Undang Anggota"
             >
-              <UserPlus weight="duotone" className="size-3.5" />
+              <UserPlus weight="bold" className="size-3.5" />
             </button>
           )}
         </div>
-        <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-muted-foreground/20 hover:scrollbar-thumb-muted-foreground/40 pr-2 pb-4">
-          <ul className="space-y-1.5 flex flex-col">
-            {roomData.participants.map((participant) => {
-              const isParticipantOnline = onlineUserIds.includes(participant.user.id);
-              const isParticipantOwner = participant.user.id === roomData.ownerId;
+        <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin pr-1 pb-4 space-y-4">
+          {onlineParticipants.length > 0 && (
+            <div>
+              <div className="px-2 pb-1 text-[11px] font-medium text-muted-foreground">
+                Online — {onlineParticipants.length}
+              </div>
+              <ul className="space-y-0.5 flex flex-col">
+                {onlineParticipants.map((p) => renderParticipant(p, true))}
+              </ul>
+            </div>
+          )}
 
-              return (
-                <li key={participant.user.id} className="group flex items-center gap-3 w-full p-2 -ml-2 rounded-lg hover:bg-muted/60 transition-colors">
-                  <ProfileHoverCard
-                    user={{
-                      id: participant.user.id,
-                      username: participant.user.username,
-                      avatar: participant.user.avatar,
-                      banner: participant.user.banner,
-                      bio: participant.user.bio,
-                      customStatus: participant.user.customStatus,
-                    }}
-                    isOnline={isParticipantOnline}
-                    currentUserId={currentUserId}
-                    onStartDM={handleStartDM}
-                  >
-                    <div className="relative cursor-pointer">
-                      <UserAvatar
-                        src={participant.user.avatar}
-                        alt={participant.user.username}
-                        className="h-8 w-8 rounded-lg shadow-sm"
-                      />
-                      {isParticipantOnline && (
-                        <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 border-2 border-background" />
-                      )}
-                    </div>
-                  </ProfileHoverCard>
-
-                  <ProfileHoverCard
-                    user={{
-                      id: participant.user.id,
-                      username: participant.user.username,
-                      avatar: participant.user.avatar,
-                      banner: participant.user.banner,
-                      bio: participant.user.bio,
-                      customStatus: participant.user.customStatus,
-                    }}
-                    isOnline={isParticipantOnline}
-                    currentUserId={currentUserId}
-                    onStartDM={handleStartDM}
-                  >
-                    <div className="flex items-center gap-1.5 cursor-pointer flex-1 min-w-0">
-                      <span 
-                        className={cn(
-                          "text-sm font-medium truncate",
-                          isParticipantOnline ? "text-foreground" : "text-muted-foreground"
-                        )}
-                      >{participant.user.name || participant.user.username}</span>
-                      {isParticipantOwner && (
-                        <Crown className="size-3 text-amber-500 fill-amber-500 shrink-0" />
-                      )}
-                    </div>
-                  </ProfileHoverCard>
-                </li>
-              );
-            })}
-          </ul>
+          {offlineParticipants.length > 0 && (
+            <div>
+              <div className="px-2 pb-1 text-[11px] font-medium text-muted-foreground">
+                Offline — {offlineParticipants.length}
+              </div>
+              <ul className="space-y-0.5 flex flex-col">
+                {offlineParticipants.map((p) => renderParticipant(p, false))}
+              </ul>
+            </div>
+          )}
         </div>
       </aside>
 

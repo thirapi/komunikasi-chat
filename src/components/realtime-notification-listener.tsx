@@ -1,5 +1,6 @@
 "use client";
 
+import { userChannel } from "@/lib/pusher/channels";
 import { useEffect, useRef } from "react";
 import { getPusher } from "@/lib/pusher/pusher.client";
 import { toast } from "sonner";
@@ -8,6 +9,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useUnread } from "./unread-provider";
 import { UserAvatar } from "./ui/user-avatar";
 import { hapticLight } from "@/lib/native/haptics";
+import { stripMarkdown } from "@/lib/strip-markdown";
+import { navigateToRoom } from "@/lib/chat/room-navigation";
+import { messagePreview } from "@/lib/chat/message-preview";
 
 interface Props {
   user: {
@@ -19,7 +23,12 @@ interface Props {
 export function RealtimeNotificationListener({ user }: Props) {
   const pathname = usePathname();
   const router = useRouter();
-  const { markAsUnread, markAsRead } = useUnread();
+  const { markAsUnread, markAsRead, recordActivity, unreadRooms } = useUnread();
+  // Rooms the sidebar already knows about; a message from any other room means
+  // someone started a DM / added us to a channel, so the sidebar must reload.
+  const knownRoomsRef = useRef(unreadRooms);
+  knownRoomsRef.current = unreadRooms;
+  const refreshedForRef = useRef(new Set<string>());
 
   // Read through a ref so the Pusher subscription is bound once for the whole
   // session. `pathname` in the dependency array used to tear down and rebuild
@@ -47,16 +56,21 @@ export function RealtimeNotificationListener({ user }: Props) {
   useEffect(() => {
     if (!user.id) return;
 
-    const channel = getPusher().subscribe(`user-${user.id}`);
+    const channel = getPusher().subscribe(userChannel(user.id));
 
     // CHAT: New Message
     channel.bind("new-message-notification", (data: any) => {
-      const { message } = data;
-      const sender = message.user.username || "unknown";
-      const avatar = message.user.avatar || "/avatars/avatar1.png";
-      const content = message.content || "[Pesan Gambar]";
+      const { message, room } = data;
+      const sender = message.user?.name || message.user?.username || "Seseorang";
+      const avatar = message.user?.avatar || "/avatars/avatar1.png";
+      const raw: string = message.content || "";
+      const mentionsMe = raw.includes(`<@${user.id}>`) || raw.includes("<@everyone>");
+      const content =
+        stripMarkdown(raw.replace(new RegExp(`<@${user.id}>`, "g"), `@${user.username}`)) ||
+        (message.attachments?.length ? "Mengirim lampiran" : "Pesan baru");
       const roomId = message.roomId;
       const roomUrl = `/channels/${roomId}`;
+      const context = room && !room.isDirect && room.name ? `#${room.name}` : "Pesan langsung";
 
       const isViewingRoom = pathnameRef.current === roomUrl;
 
@@ -64,44 +78,67 @@ export function RealtimeNotificationListener({ user }: Props) {
         return;
       }
 
+      // Keep the sidebar preview, time and ordering live for every room.
+      recordActivity(roomId, messagePreview(message, user), message.createdAt ?? new Date());
+      if (!(roomId in knownRoomsRef.current) && !refreshedForRef.current.has(roomId)) {
+        refreshedForRef.current.add(roomId);
+        router.refresh();
+      }
+
+      // The open room plays its own sound and handles read state
+      // (chat-room.tsx). If it is open but the tab is in the background, the
+      // message is still unread: flag it (sidebar dot, tab title) without a
+      // second chime; chat-room clears it when the user comes back.
+      if (isViewingRoom) {
+        if (document.visibilityState !== "visible" || !document.hasFocus()) {
+          markAsUnread(roomId, mentionsMe);
+        }
+        return;
+      }
+
       playNotificationSound();
       hapticLight();
+      markAsUnread(roomId, mentionsMe);
 
-      if (!isViewingRoom) {
-        markAsUnread(roomId);
-
-        toast.custom((t) => (
-          <div 
-            className="flex items-center gap-3 bg-background/95 backdrop-blur-md border border-border p-3 rounded-xl shadow-2xl cursor-pointer hover:bg-muted/50 transition-all group"
-            onClick={() => {
-              toast.dismiss(t);
-              router.push(roomUrl);
-            }}
-          >
-            <div className="relative">
-              <UserAvatar src={avatar} alt={sender} className="h-10 w-10 ring-2 ring-primary/10" />
-              <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 bg-primary border-2 border-background rounded-full"></div>
+      toast.custom((t) => (
+        <button
+          type="button"
+          className="flex w-[356px] max-w-[calc(100vw-2rem)] items-start gap-3 rounded-lg border border-border bg-popover p-3 text-left shadow-lg hover:bg-muted/60 transition-colors"
+          onClick={() => {
+            toast.dismiss(t);
+            navigateToRoom(roomUrl);
+          }}
+        >
+          <UserAvatar src={avatar} alt={sender} className="h-9 w-9 rounded-full" />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-baseline gap-1.5 min-w-0">
+              <p className="text-sm font-semibold text-foreground truncate">{sender}</p>
+              <p className="text-[11px] text-muted-foreground truncate shrink-0 max-w-[45%]">{context}</p>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-foreground truncate">{sender}</p>
-              <p className="text-xs text-muted-foreground truncate line-clamp-1">{content}</p>
-            </div>
+            <p className="mt-0.5 text-[13px] text-muted-foreground line-clamp-2 break-words">
+              {mentionsMe && (
+                <span className="mr-1 rounded px-1 text-[10px] font-semibold uppercase tracking-wide bg-amber-500/15 text-amber-700 dark:text-amber-300">
+                  Menyebutmu
+                </span>
+              )}
+              {content}
+            </p>
           </div>
-        ), {
-          duration: 4000,
-          position: "top-right",
-        });
+        </button>
+      ), {
+        duration: 5000,
+        position: "top-right",
+      });
 
-        if (Notification.permission === "granted" && document.visibilityState === "hidden") {
-          new Notification(sender, {
-            body: content,
-            icon: avatar,
-            tag: `chat-${roomId}`,
-          }).onclick = () => {
-            window.focus();
-            router.push(roomUrl);
-          };
-        }
+      if ("Notification" in window && Notification.permission === "granted" && document.visibilityState === "hidden") {
+        new Notification(room && !room.isDirect ? `${sender} · ${context}` : sender, {
+          body: content,
+          icon: avatar,
+          tag: `chat-${roomId}`,
+        }).onclick = () => {
+          window.focus();
+          navigateToRoom(roomUrl);
+        };
       }
     });
 
@@ -121,9 +158,9 @@ export function RealtimeNotificationListener({ user }: Props) {
 
     return () => {
       channel.unbind_all();
-      getPusher().unsubscribe(`user-${user.id}`);
+      getPusher().unsubscribe(userChannel(user.id));
     };
-  }, [user.id, markAsUnread, markAsRead, router]);
+  }, [user.id, user.username, markAsUnread, markAsRead, recordActivity, router]);
 
   return null;
 }

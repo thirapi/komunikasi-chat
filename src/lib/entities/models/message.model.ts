@@ -13,6 +13,8 @@ export interface MessageRecord {
   attachments?: AttachmentRecord[];
   isOptimistic?: boolean;
   optimisticId?: string;
+  /** Client-only: the optimistic send failed and can be retried. */
+  sendError?: boolean;
 }
 
 export interface MessageWithUserDTO extends MessageRecord {

@@ -1,12 +1,10 @@
 export function UnreadSeparator() {
   return (
-    <div className="flex items-center justify-center">
-      <div className="flex items-center flex-1">
-        <div className="flex-grow h-px bg-red-500" />
-      </div>
-      <div className="px-2 py-0.5 bg-red-500 text-white text-[10px] font-semibold rounded-full">
-        NEW
-      </div>
+    <div role="separator" aria-label="Pesan baru" className="flex items-center gap-2 pl-4 pr-3 my-2 select-none">
+      <div className="h-px flex-1 bg-rose-500/70" />
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-rose-500">
+        Baru
+      </span>
     </div>
   );
 }

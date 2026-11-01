@@ -1,20 +1,22 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Users, Info, MagnifyingGlass, CaretLeft } from "@phosphor-icons/react/dist/ssr";
+import { Users, Info, MagnifyingGlass, CaretLeft, Hash, CircleNotch } from "@phosphor-icons/react/dist/ssr";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { RoomWithParticipantsDTO } from "@/lib/entities/models/room.model";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import { useConnectionStatus } from "@/hooks/use-connection-status";
+import { Shortcut } from "@/components/ui/kbd";
+import { isPlainLeftClick, navigateToRoom } from "@/lib/chat/room-navigation";
 
 // 800-line dialog pulling in Tabs, ScrollArea, AlertDialog, Switch and the
 // image lightbox. It only renders when room details are opened, so it is split
@@ -46,6 +48,8 @@ export function ChatHeader({
   const [showDetails, setShowDetails] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
+  const connection = useConnectionStatus();
+
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -73,8 +77,8 @@ export function ChatHeader({
   }, [roomData.participants, onlineUserIds]);
 
   return (
-    <div className="flex items-center justify-between border-b bg-background/60 backdrop-blur-xl sticky top-0 z-10 px-4 py-3 md:px-6 h-16">
-      <div className="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
+    <div className="flex items-center justify-between gap-3 border-b border-border bg-background sticky top-0 z-10 px-3 md:px-4 h-14 shrink-0">
+      <div className="flex items-center gap-1 min-w-0 flex-1">
         {/* Sidebar Trigger - Mobile only */}
         {isMounted && (
           <div className="md:hidden">
@@ -82,132 +86,108 @@ export function ChatHeader({
               variant="ghost"
               size="icon"
               asChild
-              className="mr-1 -ml-2 -my-2 h-10 w-10 text-muted-foreground rounded-full bg-accent/50 border-2 border-accent transition-colors duration-200 flex-shrink-0"
-              aria-label="Back to channels"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors shrink-0 -ml-1 mr-0.5"
+              aria-label="Kembali ke channels"
             >
-              <Link href="/channels/default">
-                <CaretLeft weight="bold" className="h-7 w-7" />
+              <Link
+                href="/channels/default"
+                prefetch={false}
+                onClick={(e) => {
+                  if (isPlainLeftClick(e)) {
+                    e.preventDefault();
+                    navigateToRoom("/channels/default");
+                  }
+                }}
+              >
+                <CaretLeft weight="bold" className="h-4 w-4" />
               </Link>
             </Button>
           </div>
         )}
 
-        {roomData.isDirect ? (
-          <>
-            <div
-              className="cursor-pointer transition-transform active:scale-95"
-              onClick={() => setShowDetails(true)}
-            >
+        <button
+          type="button"
+          onClick={() => setShowDetails(true)}
+          className="flex items-center gap-2.5 min-w-0 -my-1 py-1 pl-1 pr-2 -ml-1 rounded-md hover:bg-muted/60 transition-colors text-left"
+          aria-label={roomData.isDirect ? "Lihat profil" : "Lihat info channel"}
+        >
+          <div className="relative shrink-0">
+            {roomData.isDirect ? (
               <UserAvatar
                 src={otherUser?.avatar || "/avatars/avatar1.png"}
                 alt={roomName}
-                className="h-8 w-8 rounded-md shrink-0 ring-1 ring-border shadow-sm"
+                className="h-8 w-8 rounded-full"
               />
-            </div>
-            <div
-              className="flex flex-col min-w-0 cursor-pointer group"
-              onClick={() => setShowDetails(true)}
-            >
-              <h1 className="text-sm md:text-base font-bold text-foreground leading-tight truncate group-hover:text-primary transition-colors">
-                {roomName}
-              </h1>
-              <div className="flex items-center gap-1.5 transition-opacity duration-300">
-                <span
-                  className={cn(
-                    "h-2 w-2 rounded-full",
-                    isOtherUserOnline
-                      ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
-                      : "bg-muted-foreground/50",
+            ) : roomData.avatar ? (
+              <UserAvatar src={roomData.avatar} alt={roomName} className="h-8 w-8 rounded-lg" />
+            ) : (
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                <Hash weight="bold" className="h-4 w-4" />
+              </span>
+            )}
+            {roomData.isDirect && (
+              <span
+                className={cn(
+                  "absolute -bottom-px -right-px h-2.5 w-2.5 rounded-full ring-2 ring-background",
+                  isOtherUserOnline ? "bg-emerald-500" : "bg-muted-foreground/40",
+                )}
+              />
+            )}
+          </div>
+          <div className="flex flex-col min-w-0">
+            <h1 className="text-sm font-semibold text-foreground leading-tight truncate">
+              {roomData.isDirect ? (otherUser?.name || roomName) : roomName}
+            </h1>
+            <p className="text-xs text-muted-foreground leading-tight truncate mt-0.5">
+              {connection !== "online" ? (
+                <span className="inline-flex items-center gap-1.5">
+                  {connection === "connecting" ? (
+                    <CircleNotch className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <span className="h-1.5 w-1.5 rounded-full bg-destructive" />
                   )}
-                />
-                <span className="text-[10px] text-muted-foreground font-medium truncate max-w-[150px]">
-                  {otherUser?.customStatus ? `"${otherUser.customStatus}"` : (isOtherUserOnline ? "Online" : "Offline")}
+                  {connection === "connecting" ? "Menghubungkan…" : "Tidak ada koneksi"}
                 </span>
-              </div>
-            </div>
-          </>
-        ) : (
-          <>
-            <div
-              className="cursor-pointer transition-transform active:scale-95"
-              onClick={() => setShowDetails(true)}
-            >
-              <UserAvatar
-                src={roomData.avatar}
-                alt={roomName}
-                className="h-8 w-8 rounded-md shrink-0 border shadow-sm"
-              />
-            </div>
-            <div className="flex flex-col min-w-0 ml-1">
-              <div className="flex items-center gap-3">
-                <h2
-                  className="text-base sm:text-lg font-semibold truncate leading-tight cursor-pointer hover:text-primary transition-colors"
-                  onClick={() => setShowDetails(true)}
-                >
-                  {roomName}
-                </h2>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Badge
-                        variant="secondary"
-                        className="hidden sm:flex gap-2 flex-shrink-0 font-medium py-0.5 px-2"
-                      >
-                        {onlineUserIds.length === 0 ? (
-                          <>
-                            <span className="animate-spin h-2 w-2 border-2 border-green-500 border-t-transparent rounded-full" />
-                            <span className="hidden sm:inline text-[11px]">
-                              Loading...
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <span className="h-2 w-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]" />
-                            <span className="hidden sm:inline text-[11px]">
-                              {onlineCount} online
-                            </span>
-                          </>
-                        )}
-                      </Badge>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" align="start">
-                      <p className="text-xs">
-                        {onlineUserIds.length === 0
-                          ? "Checking online members..."
-                          : `${onlineCount} online of ${roomData.participants.length} members`}
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-              {roomData.description && (
-                <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5 max-w-[500px]">
-                  {roomData.description}
-                </p>
+              ) : roomData.isDirect ? (
+                otherUser?.customStatus || (isOtherUserOnline ? "Online" : `@${otherUser?.username ?? ""}`)
+              ) : (
+                <>
+                  {roomData.participants.length} anggota
+                  {onlineCount > 0 && (
+                    <>
+                      <span className="mx-1 text-muted-foreground/50">·</span>
+                      <span className="text-emerald-600 dark:text-emerald-400">{onlineCount} online</span>
+                    </>
+                  )}
+                  {roomData.description && (
+                    <span className="hidden md:inline">
+                      <span className="mx-1 text-muted-foreground/50">·</span>
+                      {roomData.description}
+                    </span>
+                  )}
+                </>
               )}
-            </div>
-          </>
-        )}
+            </p>
+          </div>
+        </button>
       </div>
-      <div className="flex items-center gap-1 sm:gap-2">
+      <div className="flex items-center gap-1">
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
               <div className="flex items-center">
-                {/* Desktop: Slack/Teams Style Search Input Button */}
+                {/* Desktop: Slack/Linear Style Search Input Button */}
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={onToggleSearch}
-                  className="hidden md:flex items-center justify-between gap-4 h-9 w-64 px-3 text-muted-foreground hover:text-foreground transition-all border bg-secondary/50 hover:bg-secondary/80 rounded-lg group shadow-2xs"
+                  className="hidden md:flex items-center justify-between gap-3 h-8 w-52 px-2.5 text-muted-foreground hover:text-foreground transition-colors border-border bg-muted/40 hover:bg-muted rounded-md text-xs font-normal shadow-none mr-1"
                 >
-                  <div className="flex items-center gap-2">
-                    <MagnifyingGlass weight="duotone" className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:scale-105 transition-all" />
-                    <span className="text-xs font-normal">Cari pesan...</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <MagnifyingGlass className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">Cari di room ini</span>
                   </div>
-                  <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-0.5 rounded border border-border bg-background px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
-                    <span className="text-xs">⌘</span>K
-                  </kbd>
+<Shortcut keys={["mod", "f"]} className="pointer-events-none" keyClassName="h-[18px] min-w-[18px] text-[10px] bg-background" />
                 </Button>
 
                 {/* Mobile: Simple Icon Button */}
@@ -215,14 +195,14 @@ export function ChatHeader({
                   variant="ghost"
                   size="icon"
                   onClick={onToggleSearch}
-                  className="md:hidden transition-colors duration-200 flex-shrink-0"
+                  className="md:hidden h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors flex-shrink-0"
                 >
-                  <MagnifyingGlass weight="duotone" className="h-4 w-4" />
+                  <MagnifyingGlass className="h-[18px] w-[18px]" />
                 </Button>
               </div>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Cari Pesan (⌘K)</p>
+              <p>Cari di room ini</p>
             </TooltipContent>
           </Tooltip>
 
@@ -232,9 +212,9 @@ export function ChatHeader({
                 variant="ghost"
                 size="icon"
                 onClick={() => setShowDetails(true)}
-                className="transition-colors duration-200 flex-shrink-0"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors flex-shrink-0"
               >
-                <Info weight="duotone" className="h-4 w-4 sm:h-5 sm:w-5" />
+                <Info className="h-[18px] w-[18px]" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>
@@ -249,15 +229,17 @@ export function ChatHeader({
                 size="icon"
                 onClick={onToggleMembers}
                 className={cn(
-                  "transition-colors duration-200 flex-shrink-0",
-                  membersVisible && "bg-accent text-accent-foreground",
+                  // The desktop member panel only exists from lg up; between md
+                  // and lg this button had nothing to toggle.
+                  "md:hidden lg:inline-flex h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors flex-shrink-0",
+                  membersVisible && "bg-muted text-foreground",
                 )}
               >
-                <Users weight="duotone" className="h-4 w-4 sm:h-5 sm:w-5" />
+                <Users className="h-[18px] w-[18px]" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>{membersVisible ? "Hide" : "Show"} member list</p>
+              <p>{membersVisible ? "Sembunyikan daftar anggota" : "Tampilkan daftar anggota"}</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -270,6 +252,8 @@ export function ChatHeader({
         roomData={roomData}
         currentUserId={currentUserId}
         onUpdateRoom={onUpdateRoom}
+        onlineUserIds={onlineUserIds}
+        onSearch={onToggleSearch}
       />
     </div>
   );

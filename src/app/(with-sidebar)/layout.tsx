@@ -16,6 +16,7 @@ import { getInitials } from "@/lib/get-initials";
 import { MobileStackContent } from "@/app/(with-sidebar)/mobile-stack-content";
 import { MobileBottomNav } from "@/components/mobile-bottom-nav";
 import { getEffectiveUserId } from "@/lib/impersonate.guard";
+import { CurrentUserProvider } from "@/components/current-user-provider";
 
 export default async function layout({
   children,
@@ -59,6 +60,9 @@ export default async function layout({
         <EmojiProvider>
         {user ? (
           <PresenceProvider userId={user.id}>
+            <CurrentUserProvider
+              user={{ id: user.id, name: user.name, username: user.username, avatar: user.avatar }}
+            >
             <UnreadProvider>
               <RealtimeNotificationListener
                 user={{ id: user.id, username: user.username }}
@@ -80,6 +84,7 @@ export default async function layout({
                 </SidebarInset>
               </MobileStackContent>
             </UnreadProvider>
+            </CurrentUserProvider>
           </PresenceProvider>
         ) : (
           <UnreadProvider>

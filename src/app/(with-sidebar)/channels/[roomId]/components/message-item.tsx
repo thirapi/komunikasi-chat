@@ -3,6 +3,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
+import { CHAT_SANITIZE_SCHEMA, escapeUserHtml } from "@/lib/chat/markdown-sanitize";
 import { MessageWithUserDTO } from "@/lib/entities/models/message.model";
 import { RoomWithParticipantsDTO } from "@/lib/entities/models/room.model";
 import { YouTubeEmbed } from "@/components/ui/youtube-embed";
@@ -39,56 +41,58 @@ const WHITESPACE_REGEX = /\s/g;
 const CUSTOM_EMOJI_ONLY_REGEX = /^(:[a-zA-Z0-9_-]+:)+$/;
 const EXTENDED_PICTOGRAPHIC_REGEX = /\p{Extended_Pictographic}/u;
 
+const QUICK_REACTIONS = ["👍", "😂", "❤️"];
+
 const REMARK_PLUGINS = [remarkGfm, remarkBreaks];
-const REHYPE_PLUGINS = [rehypeRaw];
+// Raw HTML is parsed only for the spans/imgs we inject (greentext, custom
+// emoji); everything is then run through an allow-list. See markdown-sanitize.
+const REHYPE_PLUGINS: any[] = [rehypeRaw, [rehypeSanitize, CHAT_SANITIZE_SCHEMA]];
+
+function CodeBlock({ children }: { children: any }) {
+  const [copied, setCopied] = useState(false);
+  const codeElement = React.Children.only(children) as React.ReactElement<any>;
+  const codeContent = String(codeElement.props.children).replace(/\n$/, "");
+  const language = /language-([\w+#-]+)/.exec(codeElement.props.className || "")?.[1];
+
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(t);
+  }, [copied]);
+
+  return (
+    <div className="group/code relative my-1.5 w-full max-w-full min-w-0 overflow-hidden rounded-md border border-border bg-muted/50">
+      <div className="flex items-center justify-between h-7 pl-3 pr-1 border-b border-border/70 text-[11px] text-muted-foreground">
+        <span className="font-mono lowercase">{language || "kode"}</span>
+        <button
+          type="button"
+          className="flex items-center gap-1 h-5 px-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-background transition-colors"
+          onClick={(e) => {
+            e.stopPropagation();
+            navigator.clipboard.writeText(codeContent);
+            setCopied(true);
+          }}
+        >
+          {copied ? <Check weight="bold" className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+          <span>{copied ? "Disalin" : "Salin"}</span>
+        </button>
+      </div>
+      <pre className="overflow-x-auto px-3 py-2 min-w-0">{children}</pre>
+    </div>
+  );
+}
 
 const MARKDOWN_CODE_COMPONENTS = {
-  pre: ({ children }: any) => {
-    const codeElement = React.Children.only(children);
-    const codeContent = String(codeElement.props.children).replace(/\n$/, "");
-
-    return (
-      <div className="group/code relative my-3 w-full max-w-full min-w-0 overflow-hidden rounded-xs border border-[#E1E1E1] dark:border-[#3D3D3D] bg-[#F8F8F8] dark:bg-[#2D2D2D]">
-        {/* Code */}
-        <pre className="relative overflow-x-auto p-1 scrollbar-thin scrollbar-thumb-muted-foreground/20 min-w-0">
-          {/* Copy Button */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="
-                    absolute right-3 top-3
-                    h-7 w-7 rounded-md
-                    border border-border/40
-                    bg-background/70 backdrop-blur-sm
-                    text-muted-foreground/60
-                    opacity-0 transition-all duration-200
-                    group-hover/code:opacity-100
-                    hover:bg-black/5 hover:text-foreground
-                    dark:hover:bg-white/5
-                  "
-            onClick={(e) => {
-              e.stopPropagation();
-              navigator.clipboard.writeText(codeContent);
-              toast.success("Kode disalin!");
-            }}
-          >
-            <Copy weight="duotone" className="h-3.5 w-3.5" />
-          </Button>
-
-          {children}
-        </pre>
-      </div>
-    );
-  },
+  pre: ({ children }: any) => <CodeBlock>{children}</CodeBlock>,
   code: ({ node, className, children, ...props }: any) => {
-    const isBlock = !!className;
+    const isBlock = !!className || (typeof children === "string" && children.includes("\n"));
 
     // Block code
     if (isBlock) {
       return (
         <code
           className={cn(
-            "block whitespace-pre-wrap break-all md:whitespace-pre md:break-normal font-mono text-[12.5px] leading-relaxed text-[#1D1C1D] dark:text-[#D1D2D3]",
+            "block whitespace-pre-wrap break-all md:whitespace-pre md:break-normal font-mono text-[12.5px] leading-[1.6] text-foreground/90",
             className
           )}
           {...props}
@@ -111,13 +115,7 @@ const MARKDOWN_CODE_COMPONENTS = {
 
     return (
       <code
-        className="
-                mx-0.5 break-words whitespace-pre-wrap rounded-xs
-                bg-[#F8F8F8] dark:bg-[#2D2D2D]
-                px-[5px] py-[1.5px]
-                font-mono text-[12px] font-medium
-                text-[#E01E5A] dark:text-[#FF7B72]
-              "
+        className="break-words whitespace-pre-wrap rounded-[4px] border border-border/70 bg-muted/60 px-1 py-px font-mono text-[0.85em] text-foreground"
         {...props}
       >
         {inlineContent}
@@ -125,16 +123,9 @@ const MARKDOWN_CODE_COMPONENTS = {
     );
   },
 };
-import { ArrowBendUpLeft, ChatTeardropText, File, DownloadSimple, ArrowSquareOut, Trash, Copy, PencilSimple, Check, X, Smiley, Sparkle } from "@phosphor-icons/react/dist/ssr";
-import Link from "next/link";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
+import { ArrowBendUpLeft, File, DownloadSimple, Trash, Copy, PencilSimple, Check, WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { Button } from "@/components/ui/button";
-import { useState, useMemo, useEffect, useRef, useLayoutEffect, useCallback, memo } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback, memo } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Tooltip,
@@ -142,12 +133,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { createRoom } from "../room.action";
-import { deleteMessageAction, toggleReactionAction } from "../messages.action";
+import { deleteMessageAction } from "../messages.action";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { ImageLightbox, ImageSource } from "@/components/ui/image-lightbox";
+import { ImageLightbox } from "@/components/ui/image-lightbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -166,23 +156,26 @@ function truncate(str: string, max = 100) {
 }
 
 const STATIC_MARKDOWN_COMPONENTS = {
-  p: ({ children }: any) => <p className="mb-1 last:mb-0 leading-relaxed text-[13.5px] whitespace-pre-wrap">{children}</p>,
-  ul: ({ children }: any) => <ul className="list-disc ml-5 mb-0.5 mt-0.5 space-y-px [&_p]:m-0 [&_p]:inline">{children}</ul>,
-  ol: ({ children }: any) => <ol className="list-decimal ml-5 mb-0.5 mt-0.5 space-y-px [&_p]:m-0 [&_p]:inline">{children}</ol>,
-  li: ({ children }: any) => <li className="pl-1 leading-relaxed whitespace-pre-wrap">{children}</li>,
-  h1: ({ children }: any) => <h1 className="text-lg font-black mt-4 mb-2 border-b border-border/30 pb-1 tracking-tight">{children}</h1>,
-  h2: ({ children }: any) => <h2 className="text-base font-bold mt-3 mb-1.5 tracking-tight text-foreground/90">{children}</h2>,
-  h3: ({ children }: any) => <h3 className="text-sm font-bold mt-2 mb-1 uppercase tracking-wider text-muted-foreground">{children}</h3>,
-  hr: () => <hr className="my-4 border-border/20" />,
+  p: ({ children }: any) => <p className="mb-1 last:mb-0 whitespace-pre-wrap">{children}</p>,
+  ul: ({ children }: any) => <ul className="list-disc ml-5 my-0.5 space-y-px marker:text-muted-foreground [&_p]:m-0 [&_p]:inline">{children}</ul>,
+  ol: ({ children }: any) => <ol className="list-decimal ml-5 my-0.5 space-y-px marker:text-muted-foreground [&_p]:m-0 [&_p]:inline">{children}</ol>,
+  li: ({ children }: any) => <li className="pl-0.5 whitespace-pre-wrap">{children}</li>,
+  h1: ({ children }: any) => <h1 className="text-lg font-semibold mt-2 mb-1 tracking-tight">{children}</h1>,
+  h2: ({ children }: any) => <h2 className="text-base font-semibold mt-2 mb-1 tracking-tight">{children}</h2>,
+  h3: ({ children }: any) => <h3 className="text-[0.95em] font-semibold mt-1.5 mb-0.5">{children}</h3>,
+  blockquote: ({ children }: any) => (
+    <blockquote className="my-1 border-l-[3px] border-border pl-3 text-foreground/80 [&_p]:mb-0">{children}</blockquote>
+  ),
+  hr: () => <hr className="my-2 border-border" />,
   table: ({ children }: any) => (
-    <div className="overflow-x-auto my-3 rounded-lg border border-border/50">
-      <table className="w-full text-sm border-collapse">{children}</table>
+    <div className="overflow-x-auto my-1.5 rounded-md border border-border">
+      <table className="w-full text-[13px] border-collapse">{children}</table>
     </div>
   ),
-  thead: ({ children }: any) => <thead className="bg-muted/50 border-b border-border/50">{children}</thead>,
-  th: ({ children }: any) => <th className="px-4 py-2 text-left font-bold text-muted-foreground uppercase text-[11px] tracking-wider">{children}</th>,
-  td: ({ children }: any) => <td className="px-4 py-2 border-b border-border/10">{children}</td>,
-  strong: ({ children }: any) => <strong>{children}</strong>,
+  thead: ({ children }: any) => <thead className="bg-muted/50">{children}</thead>,
+  th: ({ children }: any) => <th className="px-3 py-1.5 text-left font-medium text-foreground border-b border-border">{children}</th>,
+  td: ({ children }: any) => <td className="px-3 py-1.5 border-b border-border/60 [tr:last-child_&]:border-b-0">{children}</td>,
+  strong: ({ children }: any) => <strong className="font-semibold text-foreground">{children}</strong>,
   em: ({ children }: any) => <em>{children}</em>,
   del: ({ children }: any) => <del>{children}</del>,
   img: ({ node, ...props }: any) => (
@@ -210,6 +203,8 @@ export function MessageItemComponent({
   isAfterSeparator,
   isHighlighted,
   onScrollToMessage,
+  onRetrySend,
+  onDiscardSend,
   roomData,
 }: {
   message: MessageWithUserDTO;
@@ -225,6 +220,8 @@ export function MessageItemComponent({
   isAfterSeparator?: boolean;
   isHighlighted?: boolean;
   onScrollToMessage?: (messageId: string) => void;
+  onRetrySend?: (message: MessageWithUserDTO) => void;
+  onDiscardSend?: (message: MessageWithUserDTO) => void;
   roomData?: RoomWithParticipantsDTO;
 }) {
   const router = useRouter();
@@ -237,7 +234,6 @@ export function MessageItemComponent({
   // Inline edit state
   const [editContent, setEditContent] = useState(message.content || "");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
-  const editInputRef = useRef<HTMLDivElement>(null);
 
   // When entering edit mode, populate and focus
   const resolveMentionsForEdit = useCallback((content: string) => {
@@ -313,7 +309,6 @@ export function MessageItemComponent({
     }
   }, [showMobileActions]);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [mobileActionOpen, setMobileActionOpen] = useState(false);
 
   const handleStartDM = useCallback(async (targetUserId: string) => {
     if (targetUserId === currentUserId) return;
@@ -371,7 +366,7 @@ export function MessageItemComponent({
   const handleCopy = () => {
     navigator.clipboard.writeText(message.content || "");
     toast.success("Teks disalin");
-    setMobileActionOpen(false);
+    setShowMobileActions(false);
   };
 
   const formatTime = (date: Date) => {
@@ -380,6 +375,24 @@ export function MessageItemComponent({
       minute: "2-digit",
       hour12: false,
     });
+  };
+
+  const formatFullDate = (date: Date) =>
+    date.toLocaleString("id-ID", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+
+  const formatSize = (bytes?: number | null) => {
+    if (!bytes) return null;
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const formatTimestamp = (date: Date) => {
@@ -391,6 +404,11 @@ export function MessageItemComponent({
     };
 
     const time = formatTime(date);
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (date.toDateString() === yesterday.toDateString()) {
+      return `Kemarin ${time}`;
+    }
     if (!isToday(date)) {
       const dateStr = date.toLocaleDateString("id-ID", {
         day: "numeric",
@@ -419,6 +437,13 @@ export function MessageItemComponent({
     const hasActualEmoji = EXTENDED_PICTOGRAPHIC_REGEX.test(cleanStr);
 
     return (emojiRegex.test(cleanStr) && hasActualEmoji) || CUSTOM_EMOJI_ONLY_REGEX.test(cleanStr);
+  }, [message.content]);
+
+  // A message made of exactly one custom emoji is shown as a sticker: large,
+  // with no bubble or text line around it.
+  const isSticker = useMemo(() => {
+    const clean = (message.content || "").replace(WHITESPACE_REGEX, "");
+    return /^:[a-zA-Z0-9_-]+:$/.test(clean);
   }, [message.content]);
 
 const isImage = (url: string) => {
@@ -540,6 +565,9 @@ const getFileName = (url: string) => {
       return `__BLOCK_CODE_${blockCodes.length - 1}__`;
     });
 
+    // 0b. User-typed HTML renders as text, never as markup.
+    processed = escapeUserHtml(processed);
+
     // 1. Allow single backticks (inline code) to span multiple lines safely
     processed = processed.replace(/(?<!`)`([^`]+)`(?!`)/g, (match, inner) => {
       return '`' + inner.replace(/\n/g, '\uE000').replace(/ /g, '\u00A0') + '`';
@@ -627,18 +655,16 @@ const getFileName = (url: string) => {
 
         if (uid === "everyone") {
           return (
-            <TooltipProvider>
-              <Tooltip delayDuration={100}>
+              <Tooltip delayDuration={200}>
                 <TooltipTrigger asChild>
-                  <span className="text-primary bg-primary/15 px-1 pb-0.5 pt-[1px] rounded-[4px] font-bold cursor-help">
+                  <span className="text-primary bg-primary/12 px-[3px] rounded-[4px] font-medium cursor-default">
                     {children}
                   </span>
                 </TooltipTrigger>
-                <TooltipContent side="top" className="font-semibold text-xs py-1.5 px-3">
-                  <p>Mentioning all users in this channel</p>
+                <TooltipContent side="top" className="text-xs py-1 px-2">
+                  <p>Menyebut semua anggota channel</p>
                 </TooltipContent>
               </Tooltip>
-            </TooltipProvider>
           );
         }
 
@@ -646,9 +672,7 @@ const getFileName = (url: string) => {
 
         if (!participant) {
           return (
-            <span
-              className="text-primary bg-primary/15 px-1 pb-0.5 pt-[1px] rounded-[4px] font-bold cursor-default"
-            >
+            <span className="text-muted-foreground bg-muted px-[3px] rounded-[4px] font-medium cursor-default">
               {children}
             </span>
           );
@@ -669,7 +693,12 @@ const getFileName = (url: string) => {
             onStartDM={handleStartDM}
           >
             <span
-              className="text-primary bg-primary/15 hover:bg-primary/25 cursor-pointer px-1 pb-0.5 pt-[1px] rounded-[4px] font-bold transition-colors"
+              className={cn(
+                "cursor-pointer px-[3px] rounded-[4px] font-medium transition-colors",
+                uid === currentUserId
+                  ? "text-amber-700 dark:text-amber-300 bg-amber-500/15 hover:bg-amber-500/25"
+                  : "text-primary bg-primary/12 hover:bg-primary/20"
+              )}
             >
               {children}
             </span>
@@ -682,7 +711,7 @@ const getFileName = (url: string) => {
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-primary hover:underline break-all transition-colors font-semibold"
+          className="text-primary underline decoration-primary/30 underline-offset-2 hover:decoration-primary break-all"
           onClick={(e) => e.stopPropagation()}
         >
           {children}
@@ -699,17 +728,56 @@ const getFileName = (url: string) => {
   const isOnline = onlineUserIds.includes(message.userId);
   const [isHovered, setIsHovered] = useState(false);
 
+  // A reply always opens a new visual group, even inside a run of messages from
+  // the same sender, so the quoted line has a header to hang from.
+  const showHeader = !isContinuation || !!message.replyToMessage;
+
+  const mentionsMe = useMemo(() => {
+    if (!message.content || message.userId === currentUserId) return false;
+    return message.content.includes(`<@${currentUserId}>`) || message.content.includes("<@everyone>");
+  }, [message.content, message.userId, currentUserId]);
+
+  const authorProfile = {
+    id: message.userId,
+    username: message.user?.username || "Unknown",
+    name: message.user?.name,
+    avatar: message.user?.avatar || "/avatars/avatar1.png",
+    banner: message.user?.banner,
+    bio: message.user?.bio,
+    customStatus: message.user?.customStatus,
+  };
+
+  const replyPreview = useMemo(() => {
+    const reply = message.replyToMessage;
+    if (!reply) return null;
+    const text = (reply.content || "")
+      .replace(/<@([a-zA-Z0-9_-]+)>/g, (match, uid) => {
+        if (uid === "everyone") return "@everyone";
+        const p = participantsById.get(uid);
+        return p ? `@${p.user.username}` : "@pengguna";
+      })
+      .replace(/```[\s\S]*?```/g, "[kode]")
+      .replace(/[*_~`]/g, "")
+      .replace(/\n+/g, " ")
+      .trim();
+    return truncate(text, 120);
+  }, [message.replyToMessage, participantsById]);
+
+  const createdAt = new Date(message.createdAt);
+
   return (
     <div
       className={cn(
-        "relative group flex items-start gap-4 px-4 transition-all duration-300 ease-in-out cursor-default",
-        isContinuation
-          ? "pt-0"
-          : cn("pt-2 hover:bg-muted/40 first:mt-0", isAfterSeparator ? "mt-1" : "mt-4"),
-        isHovered && isContinuation && "bg-muted/30",
-        isHighlighted && "bg-primary/10 ring-1 ring-primary/20 scale-[1.01] z-10",
-        showMobileActions && isMobile && "bg-muted/40",
-        isEditing && "bg-primary/5 ring-1 ring-primary/20"
+        "relative group px-3 sm:px-4 cursor-default",
+        showHeader
+          ? cn("pt-1.5 pb-0.5 first:mt-0", isAfterSeparator ? "mt-0.5" : "mt-3")
+          : "py-px",
+        "hover:bg-muted/40",
+        mentionsMe && "bg-amber-500/[0.07] hover:bg-amber-500/10 shadow-[inset_2px_0_0_#f59e0b]",
+        isHighlighted && "bg-primary/10 hover:bg-primary/10 shadow-[inset_2px_0_0_var(--primary)]",
+        showMobileActions && isMobile && "bg-muted/50",
+        isEditing && "bg-muted/40",
+        message.isOptimistic && !message.sendError && "opacity-60"
       )}
       onClick={() => {
         if (isMobile && !isEditing) setShowMobileActions(!showMobileActions);
@@ -717,216 +785,168 @@ const getFileName = (url: string) => {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className="relative pt-0.5 w-9 shrink-0 flex justify-center">
-        {!isContinuation ? (
-          <>
-            <ProfileHoverCard
-              user={{
-                id: message.userId,
-                username: message.user?.username || "Unknown",
-                avatar: message.user?.avatar || "/avatars/avatar1.png",
-                banner: message.user?.banner,
-                bio: message.user?.bio,
-                customStatus: message.user?.customStatus,
-              }}
-              isOnline={isOnline}
-              currentUserId={currentUserId}
-              onStartDM={handleStartDM}
-            >
-              <UserAvatar
-                src={message.user?.avatar || "/avatars/avatar1.png"}
-                alt={message.user?.username}
-                className="w-9 h-9 rounded-md ring-1 ring-border/50 cursor-pointer"
-              />
-            </ProfileHoverCard>
-            <div
-              className={`h-2.5 w-2.5 ring-2 ring-background rounded-full absolute -bottom-0.5 -right-0.5 ${isOnline
-                ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
-                : "bg-muted-foreground/30"
-                }`}
-            ></div>
-          </>
+      {/* Quoted message, Discord-style: a thin spine from the avatar column
+          curls into a one-line preview of the message being answered. */}
+      {message.replyToMessage && (
+        <div className="relative flex items-center gap-1.5 pl-12 mb-0.5 min-w-0 h-[18px] text-xs">
+          <span
+            aria-hidden
+            className="absolute left-[17px] top-[9px] h-[11px] w-[26px] rounded-tl-md border-l-2 border-t-2 border-border"
+          />
+          <button
+            type="button"
+            className="flex items-center gap-1.5 min-w-0 text-left text-muted-foreground hover:text-foreground transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (message.replyTo) onScrollToMessage?.(message.replyTo);
+            }}
+          >
+            <UserAvatar
+              src={
+                roomData?.participants?.find((p: any) => p.user.username === message.replyToMessage?.user?.username)?.user.avatar
+                || "/avatars/avatar1.png"
+              }
+              alt={message.replyToMessage.user?.username}
+              className="h-4 w-4 rounded-full shrink-0"
+            />
+            <span className="font-medium text-foreground/80 shrink-0">
+              {message.replyToMessage.user?.name || message.replyToMessage.user?.username || "pengguna"}
+            </span>
+            <span className="truncate">
+              {replyPreview || <span className="italic">Klik untuk melihat lampiran</span>}
+            </span>
+          </button>
+        </div>
+      )}
+
+      <div className="flex items-start gap-3">
+      <div className="relative w-9 shrink-0 flex justify-center">
+        {showHeader ? (
+          <ProfileHoverCard
+            user={authorProfile}
+            isOnline={isOnline}
+            currentUserId={currentUserId}
+            onStartDM={handleStartDM}
+          >
+            <UserAvatar
+              src={authorProfile.avatar}
+              alt={message.user?.username}
+              className="mt-0.5 w-9 h-9 rounded-full cursor-pointer hover:opacity-90 transition-opacity"
+            />
+          </ProfileHoverCard>
         ) : (
-          <span className={cn(
-            "text-[9px] text-muted-foreground/0 group-hover:text-muted-foreground/60 transition-opacity mt-1.5 font-medium",
-            isHovered && "opacity-100"
-          )}>
-            {formatTime(new Date(message.createdAt))}
-          </span>
+          <Tooltip delayDuration={400}>
+            <TooltipTrigger asChild>
+              <span
+                className={cn(
+                  "text-[10px] leading-[22px] tabular-nums text-muted-foreground select-none opacity-0 group-hover:opacity-100",
+                  isHovered && "opacity-100"
+                )}
+              >
+                {formatTime(createdAt)}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs py-1 px-2">
+              {formatFullDate(createdAt)}
+            </TooltipContent>
+          </Tooltip>
         )}
       </div>
 
       <div className="flex-1 min-w-0">
-        {!isContinuation && (
-          <div className="flex items-baseline gap-2">
+        {showHeader && (
+          <div className="flex items-baseline gap-2 min-w-0">
             <ProfileHoverCard
-              user={{
-                id: message.userId,
-                username: message.user?.username || "Unknown",
-                avatar: message.user?.avatar || "/avatars/avatar1.png",
-                banner: message.user?.banner,
-                bio: message.user?.bio,
-                customStatus: message.user?.customStatus,
-              }}
+              user={authorProfile}
               isOnline={isOnline}
               currentUserId={currentUserId}
               onStartDM={handleStartDM}
             >
-              <span 
-                className="cursor-pointer text-sm font-bold text-foreground hover:underline decoration-primary/50 underline-offset-2"
-              >{message.user?.name || message.user?.username || "Unknown User"}</span>
+              <span className="cursor-pointer truncate text-sm font-semibold text-foreground hover:underline underline-offset-2">
+                {message.user?.name || message.user?.username || "Pengguna"}
+              </span>
             </ProfileHoverCard>
 
-            <span className="text-[10px] font-medium text-muted-foreground/60">
-              {formatTimestamp(new Date(message.createdAt))}
-            </span>
-          </div>
-        )}
-
-        {message.replyToMessage && (
-          <div
-            className="flex items-center gap-2 mt-0.5 mb-1 group/reply cursor-pointer hover:bg-primary/5 p-1 rounded-sm transition-colors border-l-2 border-primary/20 pl-2"
-            onClick={() => message.replyTo && onScrollToMessage?.(message.replyTo)}
-          >
-            <ArrowBendUpLeft weight="duotone" className="h-3 w-3 text-primary/60" />
-            <div className="text-[11px] text-muted-foreground line-clamp-1">
-              <span 
-                className="font-bold text-primary/70"
-              >{message.replyToMessage.user?.name || message.replyToMessage.user?.username || "user"}</span>
-              <span className="ml-1 opacity-80 italic">
-                {truncate(
-                  message.replyToMessage.content?.replace(/<@([a-zA-Z0-9_-]+)>/g, (match, uid) => {
-                    if (uid === "everyone") return "@everyone";
-                    const p = roomData?.participants?.find((p: any) => p.user.id === uid);
-                    return p ? `@${p.user.username}` : `@${uid}`;
-                  }) || "",
-                  60
-                )}
-              </span>
-            </div>
+            <Tooltip delayDuration={400}>
+              <TooltipTrigger asChild>
+                <time
+                  dateTime={createdAt.toISOString()}
+                  className="shrink-0 text-[11px] tabular-nums text-muted-foreground cursor-default"
+                >
+                  {message.sendError ? formatTimestamp(createdAt) : message.isOptimistic ? "Mengirim…" : formatTimestamp(createdAt)}
+                </time>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs py-1 px-2">
+                {formatFullDate(createdAt)}
+              </TooltipContent>
+            </Tooltip>
           </div>
         )}
 
         {/* === INLINE EDIT MODE === */}
         {isEditing ? (
-          <div className="mt-1 mb-1">
-            <div className="relative group/edit-input">
+          <div className="mt-1 mb-1.5" onClick={(e) => e.stopPropagation()}>
+            <div className="relative">
               <MentionTextarea
                 value={editContent}
                 onChange={(val) => setEditContent(val)}
                 onSubmit={handleSaveEdit}
                 onKeyDown={handleEditKeyDown}
-                className="w-full bg-background border border-primary/30 rounded-lg focus-within:ring-2 focus-within:ring-primary/40 min-h-[40px] max-h-[300px] pr-10"
+                className="w-full bg-background border border-border rounded-lg focus-within:border-ring/60 focus-within:ring-2 focus-within:ring-ring/15 min-h-[40px] max-h-[300px] pr-10"
                 maxHeight={300}
                 roomData={roomData!}
                 currentUserId={currentUserId}
                 autoFocus
               />
-              <div className="absolute right-2 bottom-2">
+              <div className="absolute right-1.5 bottom-1.5">
                 <EmojiPickerComponent
                   onEmojiSelect={(emoji) => setEditContent((prev) => prev + emoji)}
-                  triggerClassName="h-7 w-7 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all flex items-center justify-center"
+                  triggerClassName="h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center justify-center"
                 />
               </div>
             </div>
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className="text-[11px] text-muted-foreground">
-                escape untuk <button onClick={onCancelEdit} className="text-primary hover:underline font-medium">membatalkan</button>
-                {" "}&bull;{" "}
-                enter untuk <button onClick={handleSaveEdit} className="text-primary hover:underline font-medium">menyimpan</button>
-              </span>
-            </div>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              <kbd className="font-sans font-medium text-foreground/80">Esc</kbd> untuk{" "}
+              <button onClick={onCancelEdit} className="text-primary hover:underline">batal</button>
+              <span className="mx-1.5 text-muted-foreground/50">·</span>
+              <kbd className="font-sans font-medium text-foreground/80">Enter</kbd> untuk{" "}
+              <button onClick={handleSaveEdit} disabled={isSavingEdit} className="text-primary hover:underline disabled:opacity-50">
+                {isSavingEdit ? "menyimpan…" : "simpan"}
+              </button>
+            </p>
           </div>
         ) : (
           /* === NORMAL VIEW MODE === */
-          <>
-            {message.content && (
-              <div className="flex items-baseline gap-1.5 flex-wrap w-full min-w-0">
-                <div
-                  className={cn(
-                    "leading-relaxed text-foreground/90 mt-0.5 break-words min-w-0 w-full max-w-full",
-                    messageIsOnlyEmoji ? "text-5xl leading-none" : "text-[13.5px]",
-                    "pr-10"
-                  )}
-                >
-                  {renderContent(message.content)}
-                </div>
-                {isEdited && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="text-[10px] text-muted-foreground/50 cursor-default select-none hover:text-muted-foreground/80 transition-colors">
-                        (edited)
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="text-[10px] font-medium py-1 px-2">
-                      <p>{formatEditedTime(new Date(message.updatedAt))}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-              </div>
-            )}
-          </>
-        )}
-
-        {/* Reactions Section */}
-        {groupedReactions.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1 mt-2 mb-1 animate-in fade-in zoom-in-95 duration-200">
-            {groupedReactions.map((group) => (
-              <TooltipProvider key={group.emoji}>
-                <Tooltip delayDuration={300}>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleToggleReaction(group.emoji); }}
-                      className={cn(
-                        "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs transition-all border select-none active:scale-95 hover:scale-105 shadow-sm duration-150 ease-out",
-                        group.hasReacted
-                          ? "bg-primary/15 border-primary/45 text-primary shadow-md shadow-primary/5 ring-1 ring-primary/30"
-                          : "bg-muted/40 border-border/80 hover:bg-muted/70 hover:border-muted-foreground/30 text-muted-foreground"
-                      )}
-                    >
-                      <span 
-                        className="text-base leading-none flex items-center justify-center min-w-[18px] min-h-[18px] transform hover:scale-115 transition-transform duration-100"
-                      >{renderReactionEmoji(group.emoji)}</span>
-                      <span className={cn("font-bold tabular-nums text-[11px]", group.hasReacted ? "text-primary" : "text-muted-foreground/70")}>
-                        {group.count}
-                      </span>
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent
-                    side="top"
-                    className="max-w-[220px] rounded-lg border-0 bg-zinc-900 dark:bg-zinc-100 shadow-2xl px-3 py-2"
-                  >
-                    <div className="flex flex-col gap-2 items-center">
-                      <span 
-                        className="text-3xl leading-none flex items-center justify-center p-1"
-                      >{renderReactionEmoji(group.emoji)}</span>
-                      <p className="text-[11px] font-medium leading-snug text-zinc-100 dark:text-zinc-900 text-center">
-                        <span className="font-bold">{group.users.join(", ")}</span>
-                        {" "}bereaksi
-                      </p>
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            ))}
-
-            {/* Add Reaction button — visible only on hover, Discord/Slack style */}
+          message.content && (
             <div
               className={cn(
-                "transition-all duration-200",
-                isHovered ? "opacity-100 scale-100" : "opacity-0 scale-90 pointer-events-none"
+                "break-words min-w-0 max-w-full text-foreground",
+                isSticker
+                  ? "py-1 [&_p]:m-0 [&_img.fediverse-emoji]:!h-28 [&_img.fediverse-emoji]:!w-28 [&_img.fediverse-emoji]:!m-0"
+                  : messageIsOnlyEmoji
+                    ? "text-[2.5rem] leading-tight py-0.5"
+                    : "text-sm leading-[1.45]"
               )}
-              onClick={(e) => e.stopPropagation()}
             >
-              <EmojiPickerComponent
-                onEmojiSelect={handleToggleReaction}
-                triggerClassName="h-6 w-6 rounded-full border border-dashed border-muted-foreground/40 text-muted-foreground/60 hover:border-primary/50 hover:text-primary hover:bg-primary/10 transition-all"
-                triggerSize="sm"
-              />
+              {renderContent(message.content)}
+              {isEdited && (
+                <Tooltip delayDuration={300}>
+                  <TooltipTrigger asChild>
+                    <span className="ml-1 align-baseline text-[10px] text-muted-foreground cursor-default select-none">
+                      (diedit)
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs py-1 px-2">
+                    Diedit {formatEditedTime(new Date(message.updatedAt))}
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </div>
-          </div>
+          )
         )}
 
+        {/* Embeds & attachments come before reactions so reactions always
+            sit at the bottom of the message, like every other chat app. */}
         {socialEmbeds.length > 0 && (
           <div className="flex flex-col gap-1">
             {socialEmbeds}
@@ -934,195 +954,284 @@ const getFileName = (url: string) => {
         )}
 
         {message.attachments && message.attachments.length > 0 && (
-          <div className="flex flex-col gap-2 mt-2 max-w-[500px]">
+          <div className="flex flex-col gap-1.5 mt-1 mb-0.5 max-w-[480px]">
             {imagesAndVideos.length > 0 && (
               <div className={cn(
-                "grid gap-1 overflow-hidden rounded-xl border border-border/50 bg-muted/20 shadow-sm",
-                imagesAndVideos.length === 1 && "grid-cols-1 max-w-sm",
-                imagesAndVideos.length === 2 && "grid-cols-2",
-                imagesAndVideos.length >= 3 && "grid-cols-2",
+                "grid gap-0.5 overflow-hidden rounded-lg",
+                imagesAndVideos.length === 1 ? "grid-cols-1 w-fit max-w-full sm:max-w-sm" : "grid-cols-2",
               )}>
                 {imagesAndVideos.slice(0, 4).map((item, idx) => (
-                  <div
+                  <button
+                    type="button"
                     key={item.url}
                     className={cn(
-                      "relative group-media cursor-zoom-in overflow-hidden aspect-square sm:aspect-auto bg-muted/30",
-                      imagesAndVideos.length === 1 ? "aspect-auto min-h-[200px] max-h-[450px]" : "aspect-[4/3]",
+                      "group/media relative overflow-hidden bg-muted cursor-zoom-in",
+                      imagesAndVideos.length === 1 ? "max-h-[360px]" : "aspect-square",
                       imagesAndVideos.length === 3 && idx === 0 && "col-span-2 aspect-[2/1]",
                     )}
                     onClick={(e) => { e.stopPropagation(); openLightbox(idx); }}
                   >
                     {item.type === 'video' ? (
-                      <div className="w-full h-full relative">
+                      <>
                         <video
                           src={item.url}
-                          className="w-full h-full object-cover"
+                          className={cn("block object-cover", imagesAndVideos.length === 1 ? "max-h-[360px] w-auto max-w-full" : "h-full w-full")}
                           preload="metadata"
                         />
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-media:hover:bg-black/40 transition-colors">
-                          <div className="bg-primary/80 rounded-full p-3 shadow-xl transform transition-transform group-media:hover:scale-110">
-                            <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <span className="absolute inset-0 flex items-center justify-center">
+                          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/55 text-white">
+                            <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 20 20">
                               <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.841z" />
                             </svg>
-                          </div>
-                        </div>
-                      </div>
+                          </span>
+                        </span>
+                      </>
                     ) : (
                       <img
                         src={item.url}
                         alt={item.filename}
-                        className="w-full h-full object-cover transition-transform duration-500 group-media:hover:scale-110"
+                        loading="lazy"
+                        className={cn("block object-cover", imagesAndVideos.length === 1 ? "max-h-[360px] w-auto max-w-full" : "h-full w-full")}
                       />
                     )}
-                    <div className="absolute inset-0 bg-black/0 group-media:hover:bg-black/20 transition-colors flex items-center justify-center">
-                      <ArrowSquareOut weight="duotone" className="w-8 h-8 text-white opacity-0 group-media:hover:opacity-100 transition-all scale-75 group-media:hover:scale-100 drop-shadow-lg" />
-                    </div>
+                    <span className="absolute inset-0 bg-black/0 group-hover/media:bg-black/10 transition-colors" />
                     {imagesAndVideos.length > 4 && idx === 3 && (
-                      <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center">
-                        <span className="text-white text-xl font-bold">+{imagesAndVideos.length - 4}</span>
-                      </div>
+                      <span className="absolute inset-0 bg-black/55 flex items-center justify-center text-white text-lg font-semibold">
+                        +{imagesAndVideos.length - 4}
+                      </span>
                     )}
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
 
             {otherFiles.length > 0 && (
-              <div className="flex flex-col gap-1.5">
-                {otherFiles.map((attachment) => (
-                  <div key={attachment.id} className="group flex items-center gap-3 p-2.5 rounded-xl border border-border/50 bg-muted/30 hover:bg-muted/50 transition-all hover:shadow-md max-w-sm">
-                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                      <File weight="duotone" className="h-5 w-5 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-semibold truncate text-foreground/90">{getFileName(attachment.url)}</p>
-                      <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-tight">
-                        {attachment.size ? `${(attachment.size / 1024).toFixed(1)} KB` : "Attachment"}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                      <Button variant="ghost" size="icon" asChild className="h-8 w-8 rounded-full hover:bg-primary/10 hover:text-primary" onClick={(e) => e.stopPropagation()}>
-                        <a href={attachment.url} target="_blank" rel="noopener noreferrer">
-                          <ArrowSquareOut weight="duotone" className="h-4 w-4" />
+              <div className="flex flex-col gap-1">
+                {otherFiles.map((attachment) => {
+                  const name = getFileName(attachment.url);
+                  const ext = name.includes(".") ? name.split(".").pop()!.slice(0, 4) : "file";
+                  return (
+                    <div key={attachment.id} className="group/file flex items-center gap-3 py-2 pl-2 pr-1.5 rounded-lg border border-border bg-background hover:bg-muted/40 transition-colors max-w-sm">
+                      <div className="h-9 w-9 rounded-md bg-muted flex flex-col items-center justify-center shrink-0 text-muted-foreground">
+                        <File className="h-4 w-4" />
+                        <span className="text-[8px] font-semibold uppercase leading-none mt-0.5">{ext}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <a
+                          href={attachment.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="block text-[13px] font-medium truncate text-foreground hover:underline"
+                        >
+                          {name}
+                        </a>
+                        <p className="text-[11px] text-muted-foreground">
+                          {formatSize(attachment.size) ?? "Lampiran"}
+                        </p>
+                      </div>
+                      <Button variant="ghost" size="icon" asChild className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground" onClick={(e) => e.stopPropagation()}>
+                        <a href={attachment.url} download={name} aria-label={`Unduh ${name}`}>
+                          <DownloadSimple className="h-4 w-4" />
                         </a>
                       </Button>
-                      <Button variant="ghost" size="icon" asChild className="h-8 w-8 rounded-full hover:bg-primary/10 hover:text-primary" onClick={(e) => e.stopPropagation()}>
-                        <a href={attachment.url} download={getFileName(attachment.url)}>
-                          <DownloadSimple weight="duotone" className="h-4 w-4" />
-                        </a>
-                      </Button>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
         )}
 
-        {/* Actions Bar - Tap to Reveal on Mobile / Hover on Desktop */}
-        {!isEditing && (
-          <div
-            className={cn(
-              "absolute -top-3 right-4 transition-all duration-300 transform z-10",
-              isMobile
-                ? (showMobileActions
-                  ? "opacity-100 translate-y-0 scale-100 pointer-events-auto"
-                  : "opacity-0 translate-y-2 scale-95 pointer-events-none")
-                : "opacity-0 md:opacity-0 md:group-hover:opacity-100 md:translate-y-1 md:group-hover:translate-y-0"
-            )}
-            onClick={(e) => isMobile && e.stopPropagation()}
-          >
-            <div className="flex items-center gap-1 bg-background/80 backdrop-blur-md shadow-lg border border-border/40 rounded-lg p-0.5 ring-1 ring-black/5">
-              <TooltipProvider>
-                <Tooltip>
+        {/* Reactions */}
+        {groupedReactions.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1 mt-1 mb-0.5">
+            {groupedReactions.map((group) => {
+              const others = group.users.length - 3;
+              const who = group.users.slice(0, 3).join(", ") + (others > 0 ? ` dan ${others} lainnya` : "");
+              return (
+                <Tooltip key={group.emoji} delayDuration={300}>
                   <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => { e.stopPropagation(); onReply(message); }}
-                      className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleToggleReaction(group.emoji); }}
+                      aria-pressed={group.hasReacted}
+                      className={cn(
+                        "flex items-center gap-1 h-6 pl-1.5 pr-2 rounded-full text-xs border select-none transition-colors active:scale-95",
+                        group.hasReacted
+                          ? "bg-primary/10 border-primary/40 text-primary"
+                          : "bg-muted/50 border-transparent text-muted-foreground hover:border-border hover:text-foreground"
+                      )}
                     >
-                      <ArrowBendUpLeft className="w-3.5 h-3.5" />
-                    </Button>
+                      <span className="text-[15px] leading-none flex items-center justify-center min-w-4">
+                        {renderReactionEmoji(group.emoji)}
+                      </span>
+                      <span className="font-medium tabular-nums text-[11px]">{group.count}</span>
+                    </button>
                   </TooltipTrigger>
-                  <TooltipContent
-                    side="top"
-                    className="text-[10px] font-bold py-1 px-2"
-                  >
-                    <p>Reply</p>
+                  <TooltipContent side="top" className="max-w-[240px] px-2.5 py-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl leading-none shrink-0">{renderReactionEmoji(group.emoji)}</span>
+                      <p className="text-xs leading-snug">
+                        <span className="font-medium">{who}</span> bereaksi
+                      </p>
+                    </div>
                   </TooltipContent>
                 </Tooltip>
-                <EmojiPickerComponent onEmojiSelect={handleToggleReaction} />
+              );
+            })}
 
-                {message.userId === currentUserId && (
-                  <>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onStartEdit(message);
-                          }}
-                          className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-                        >
-                          <PencilSimple weight="duotone" className="w-3.5 h-3.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent
-                        side="top"
-                        className="text-[10px] font-bold py-1 px-2"
-                      >
-                        <p>Edit</p>
-                      </TooltipContent>
-                    </Tooltip>
-
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              disabled={isDeleting}
-                              className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                            >
-                              <Trash weight="duotone" className="w-3.5 h-3.5" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Hapus Pesan?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Tindakan ini tidak dapat dibatalkan. Pesan akan dihapus untuk semua orang.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Batal</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={handleDelete}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                              >
-                                Hapus
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </TooltipTrigger>
-                      <TooltipContent
-                        side="top"
-                        className="text-[10px] font-bold py-1 px-2"
-                      >
-                        <p>Delete</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </>
-                )}
-              </TooltipProvider>
+            <div
+              className={cn(
+                "transition-opacity duration-150",
+                isHovered || (isMobile && showMobileActions) ? "opacity-100" : "opacity-0 pointer-events-none"
+              )}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <EmojiPickerComponent
+                onEmojiSelect={handleToggleReaction}
+                triggerClassName="h-6 w-7 rounded-full bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center justify-center"
+                triggerSize="sm"
+              />
             </div>
           </div>
         )}
+
+        {message.sendError && (
+          <div className="mt-0.5 flex items-center gap-1.5 text-xs" onClick={(e) => e.stopPropagation()}>
+            <WarningCircle weight="fill" className="h-3.5 w-3.5 text-destructive shrink-0" />
+            <span className="text-destructive">Gagal terkirim</span>
+            <span className="text-muted-foreground/50">·</span>
+            <button type="button" onClick={() => onRetrySend?.(message)} className="font-medium text-foreground hover:underline">
+              Coba lagi
+            </button>
+            <span className="text-muted-foreground/50">·</span>
+            <button type="button" onClick={() => onDiscardSend?.(message)} className="text-muted-foreground hover:text-foreground hover:underline">
+              Hapus
+            </button>
+          </div>
+        )}
+
+        {/* Hover toolbar (desktop) / tap-to-reveal toolbar (mobile) */}
+        {!isEditing && !message.isOptimistic && (
+          <div
+            className={cn(
+              "absolute -top-4 right-3 sm:right-4 z-10 transition-opacity duration-100",
+              isMobile
+                ? (showMobileActions ? "opacity-100" : "opacity-0 pointer-events-none")
+                : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto has-[[data-state=open]]:opacity-100 has-[[data-state=open]]:pointer-events-auto"
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center bg-popover border border-border rounded-md shadow-sm p-0.5">
+              {QUICK_REACTIONS.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={() => handleToggleReaction(emoji)}
+                  className="h-7 w-7 rounded flex items-center justify-center text-base hover:bg-muted transition-colors"
+                  aria-label={`Reaksi ${emoji}`}
+                >
+                  {emoji}
+                </button>
+              ))}
+              <span className="mx-0.5 h-4 w-px bg-border" />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <EmojiPickerComponent
+                      onEmojiSelect={handleToggleReaction}
+                      triggerClassName="h-7 w-7 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center justify-center"
+                    />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs py-1 px-2">Tambah reaksi</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => onReply(message)}
+                    className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    aria-label="Balas"
+                  >
+                    <ArrowBendUpLeft className="w-4 h-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs py-1 px-2">Balas</TooltipContent>
+              </Tooltip>
+              {message.content && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={handleCopy}
+                      className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      aria-label="Salin teks"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs py-1 px-2">Salin teks</TooltipContent>
+                </Tooltip>
+              )}
+
+              {message.userId === currentUserId && (
+                <>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => onStartEdit(message)}
+                        className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                        aria-label="Edit"
+                      >
+                        <PencilSimple className="w-4 h-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs py-1 px-2">Edit</TooltipContent>
+                  </Tooltip>
+
+                  <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <AlertDialogTrigger asChild>
+                          <button
+                            type="button"
+                            disabled={isDeleting}
+                            className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                            aria-label="Hapus"
+                          >
+                            <Trash className="w-4 h-4" />
+                          </button>
+                        </AlertDialogTrigger>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs py-1 px-2">Hapus</TooltipContent>
+                    </Tooltip>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Hapus pesan ini?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Pesan akan dihapus untuk semua orang dan tidak bisa dikembalikan.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Batal</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={(e) => { e.preventDefault(); handleDelete(); }}
+                          disabled={isDeleting}
+                          className="bg-destructive text-white hover:bg-destructive/90"
+                        >
+                          {isDeleting ? "Menghapus…" : "Hapus"}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
       </div>
 
       {lightboxOpen && (

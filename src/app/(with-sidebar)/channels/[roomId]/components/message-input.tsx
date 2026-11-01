@@ -13,9 +13,10 @@ import { setTypingStatusAction } from "../messages.action";
 import { useTypingIndicator } from "@/hooks/use-typing-indicator";
 import { RoomRecord, RoomWithParticipantsDTO } from "@/lib/entities/models/room.model";
 import { MessageWithUserDTO } from "@/lib/entities/models/message.model";
-import { ArrowBendUpLeft, X, Paperclip, File, Eye, EyeSlash } from "@phosphor-icons/react/dist/ssr";
+import { ArrowBendUpLeft, X, Paperclip, File, Plus, PaperPlaneRight } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 import { MentionTextarea } from "@/components/ui/mention-textarea";
+import { registerRetry, clearRetry } from "@/lib/chat/pending-sends";
 import dynamic from "next/dynamic";
 
 // The picker carries the whole `frimousse` emoji dataset and is only reachable
@@ -36,6 +37,8 @@ interface Props {
   inputRef: React.RefObject<HTMLDivElement | null>;
   onNewMessage: (message: MessageWithUserDTO) => void;
   onStartEditLast: () => void;
+  /** Called when a send fails; the row should offer "Coba lagi". */
+  onSendFailed: (optimisticId: string) => void;
   user: {
     id: string;
     name: string;
@@ -52,10 +55,10 @@ export function MessageInput({
   inputRef,
   onNewMessage,
   onStartEditLast,
+  onSendFailed,
   user,
 }: Props) {
   const [content, setContent] = useState("");
-  const [isSending, setIsSending] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [filePreviews, setFilePreviews] = useState<{ file: File; preview: string | null }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -115,7 +118,7 @@ export function MessageInput({
     const validFiles: File[] = [];
     for (const file of files) {
       if (file.size > MAX_FILE_SIZE) {
-        toast.error(`File "${file.name}" terlalu besar. Maksimal 10MB`);
+        toast.error(`File "${file.name}" terlalu besar. Maksimal 50 MB`);
         continue;
       }
       validFiles.push(file);
@@ -149,120 +152,152 @@ export function MessageInput({
 
 
 
-  const handleSend = useCallback(
-    async (e?: React.FormEvent) => {
-      e?.preventDefault();
+  type SendJob = {
+    optimisticId: string;
+    content: string;
+    replyTo?: string;
+    files: File[];
+    attachments?: { url: string; key: string; fileType: string; size?: number }[];
+  };
 
-      if ((!content.trim() && selectedFiles.length === 0) || isSending || !userId) return;
-
-      setIsSending(true);
-      sendStopTypingEvent.cancel();
-      if (userId) setTypingStatusAction(userId, roomData.id, false);
-
-      let attachments: { url: string; key: string; fileType: string; size?: number }[] | undefined = undefined;
-
+  /**
+   * Upload (if needed) and create the message for an optimistic row that is
+   * already on screen. On failure the row is flagged and a retry is registered,
+   * so nothing the user typed is ever lost to a flaky connection.
+   */
+  const deliver = useCallback(
+    async (job: SendJob) => {
       try {
-        if (selectedFiles.length > 0) {
-          const uploadPromises = selectedFiles.map(async (file) => {
-            const formData = new FormData();
-            formData.append("file", file);
-            const uploadResponse = await uploadFileAction(formData, `channels/${roomData.id}`);
-            if (uploadResponse.status === "success" && uploadResponse.data) {
-              return {
-                url: uploadResponse.data.fileurl,
-                key: uploadResponse.data.filename,
-                fileType: uploadResponse.data.mimetype,
-                size: uploadResponse.data.size,
-              };
-            } else {
-              throw new Error(uploadResponse.error?.message || `Gagal mengunggah file ${file.name}`);
-            }
-          });
-
-          attachments = await Promise.all(uploadPromises);
+        if (job.files.length > 0 && !job.attachments) {
+          job.attachments = await Promise.all(
+            job.files.map(async (file) => {
+              const formData = new FormData();
+              formData.append("file", file);
+              const res = await uploadFileAction(formData, `channels/${roomData.id}`);
+              if (res.status === "success" && res.data) {
+                return {
+                  url: res.data.fileurl,
+                  key: res.data.filename,
+                  fileType: res.data.mimetype,
+                  size: res.data.size,
+                };
+              }
+              throw new Error(res.error?.message || `Gagal mengunggah ${file.name}`);
+            }),
+          );
         }
-
-        const parseContentForSend = (raw: string) => {
-          return raw.replace(/(?<!<)@([a-zA-Z0-9_-]+)/g, (match, username) => {
-            if (username.toLowerCase() === "everyone") return "<@everyone>";
-            const participant = roomData.participants?.find(p => p.user.username.toLowerCase() === username.toLowerCase());
-            return participant ? `<@${participant.user.id}>` : match;
-          });
-        };
-        const parsedContentForSend = parseContentForSend(content);
-
-        // Optimistic message
-        const optimisticId = createId();
-        const optimisticMessage: MessageWithUserDTO = {
-          id: `optimistic-${optimisticId}`,
-          content: parsedContentForSend,
-          userId,
-          roomId: roomData.id,
-          attachments: attachments || selectedFiles.map((file, index) => ({
-            id: `temp-${index}`,
-            url: filePreviews[index]?.preview || '',
-            key: file.name,
-            fileType: file.type,
-            size: file.size,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          })),
-          replyTo: replyingTo?.id || null,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          isOptimistic: true,
-          optimisticId,
-          user: {
-            username: user.username,
-            name: user.name,
-            avatar: user.avatar,
-          },
-        } as any;
-
-        hapticMedium();
-        onNewMessage(optimisticMessage);
-        const currentContent = parsedContentForSend;
-        const currentReplyTo = replyingTo?.id;
-
-        setContent("");
-        clearAllFiles();
-        onCancelReply();
-
-
 
         const response = await createMessage(
           userId,
-          currentContent,
+          job.content,
           roomData.id,
-          currentReplyTo,
-          attachments,
-          optimisticId
+          job.replyTo,
+          job.attachments,
+          job.optimisticId,
         );
 
         if (response.status === "success" && response.data) {
+          clearRetry(job.optimisticId);
           onNewMessage(response.data);
         } else {
-          console.error("Gagal mengirim pesan:", response.error);
-          toast.error(response.error?.message);
+          throw new Error(response.error?.message || "Gagal mengirim pesan");
         }
       } catch (err: any) {
-        toast.error(err.message || "Terjadi kesalahan saat mengirim pesan");
-      } finally {
-        setIsSending(false);
+        console.error("Gagal mengirim pesan:", err);
+        registerRetry(job.optimisticId, () => {
+          void deliver(job);
+        });
+        onSendFailed(job.optimisticId);
       }
+    },
+    [userId, roomData.id, onNewMessage, onSendFailed],
+  );
+
+  const handleSend = useCallback(
+    (e?: React.FormEvent) => {
+      e?.preventDefault();
+
+      if ((!content.trim() && selectedFiles.length === 0) || !userId) return;
+
+      sendStopTypingEvent.cancel();
+      setTypingStatusAction(userId, roomData.id, false);
+
+      const parsedContent = content.replace(/(?<!<)@([a-zA-Z0-9_-]+)/g, (match, username) => {
+        if (username.toLowerCase() === "everyone") return "<@everyone>";
+        const participant = roomData.participants?.find(
+          (p) => p.user.username.toLowerCase() === username.toLowerCase(),
+        );
+        return participant ? `<@${participant.user.id}>` : match;
+      });
+
+      // The message goes on screen immediately — before any upload — and the
+      // composer clears, so the user can keep typing (Telegram-style). Upload
+      // and delivery continue in the background via `deliver`.
+      const optimisticId = createId();
+      const optimisticMessage = {
+        id: `optimistic-${optimisticId}`,
+        content: parsedContent,
+        userId,
+        roomId: roomData.id,
+        attachments: selectedFiles.map((file, index) => ({
+          id: `temp-${optimisticId}-${index}`,
+          url: filePreviews[index]?.preview || "",
+          key: file.name,
+          fileType: file.type,
+          size: file.size,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })),
+        replyTo: replyingTo?.id || null,
+        // Lets the quoted line render immediately instead of popping in
+        // when the server copy replaces the optimistic one.
+        replyToMessage: replyingTo
+          ? {
+              id: replyingTo.id,
+              content: replyingTo.content,
+              user: { username: replyingTo.user?.username, name: replyingTo.user?.name },
+            }
+          : null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isOptimistic: true,
+        optimisticId,
+        user: {
+          username: user.username,
+          name: user.name,
+          avatar: user.avatar,
+        },
+      } as unknown as MessageWithUserDTO;
+
+      const job: SendJob = {
+        optimisticId,
+        content: parsedContent,
+        replyTo: replyingTo?.id,
+        files: [...selectedFiles],
+      };
+
+      hapticMedium();
+      onNewMessage(optimisticMessage);
+      setContent("");
+      clearAllFiles();
+      onCancelReply();
+
+      void deliver(job);
     },
     [
       content,
       selectedFiles,
       filePreviews,
-      isSending,
       userId,
       roomData.id,
-      replyingTo?.id,
+      roomData.participants,
+      replyingTo,
       onCancelReply,
       sendStopTypingEvent,
       onNewMessage,
+      deliver,
       user.username,
+      user.name,
       user.avatar,
     ],
   );
@@ -270,6 +305,11 @@ export function MessageInput({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Escape") {
       if (replyingTo) onCancelReply();
+    }
+    // Slack/Discord habit: ↑ in an empty composer edits your last message.
+    if (e.key === "ArrowUp" && !content.trim() && selectedFiles.length === 0) {
+      e.preventDefault();
+      onStartEditLast();
     }
   };
 
@@ -314,7 +354,7 @@ export function MessageInput({
         const file = item.getAsFile();
         if (file) {
           if (file.size > MAX_FILE_SIZE) {
-            toast.error(`Gambar "${file.name}" terlalu besar. Maksimal 10MB`);
+            toast.error(`Gambar "${file.name}" terlalu besar. Maksimal 50 MB`);
             continue;
           }
           newFiles.push(file);
@@ -338,194 +378,206 @@ export function MessageInput({
     return () => window.removeEventListener("paste", handlePaste);
   }, [selectedFiles.length]);
 
+  const replyExcerpt = replyingTo?.content
+    ? replyingTo.content
+        .replace(/<@([a-zA-Z0-9_-]+)>/g, (match, uid) => {
+          if (uid === "everyone") return "@everyone";
+          const participant = roomData?.participants?.find((p: any) => p.user.id === uid);
+          return participant ? `@${participant.user.username}` : "@pengguna";
+        })
+        .replace(/```[\s\S]*?```/g, "[kode]")
+        .replace(/[*_~`]/g, "")
+        .replace(/\n+/g, " ")
+    : "Lampiran";
+
+  const hasTray = !!replyingTo || selectedFiles.length > 0;
+  const canSend = !!content.trim() || selectedFiles.length > 0;
+
+  const formatSize = (bytes: number) =>
+    bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+
   return (
-    <div className="flex flex-col gap-0 px-3 sm:px-6 pb-4 sm:pb-6">
-      {/* File Previews */}
-      {selectedFiles.length > 0 && (
-        <div className="relative rounded-t-xl bg-muted/30 border-x border-t border-border/50 backdrop-blur-md px-4 py-3 flex flex-wrap gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-          {filePreviews.map((item, index) => (
-            <div key={index} className="relative group h-20 w-20 sm:h-24 sm:w-24 rounded-lg overflow-hidden border border-border/50 shadow-sm bg-background/50">
-              {item.preview ? (
-                item.file.type.startsWith("video/") ? (
-                  <div className="h-full w-full relative">
-                    <video src={item.preview} className="h-full w-full object-cover" />
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                      <div className="bg-primary/80 rounded-full p-1.5 shadow-lg">
-                        <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.841z" />
-                        </svg>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <img src={item.preview} alt="Preview" className="h-full w-full object-cover" />
-                )
-              ) : (
-                <div className="h-full w-full flex flex-col items-center justify-center p-2 text-center">
-                  <File weight="duotone" className="h-8 w-8 text-primary/60 mb-1" />
-                  <span className="text-[10px] truncate w-full px-1">{item.file.name}</span>
-                </div>
-              )}
-              <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <Button
-                  variant="destructive"
-                  size="icon"
-                  className="h-6 w-6 rounded-full shadow-lg"
-                  onClick={() => removeFile(index)}
-                >
-                  <X weight="duotone" className="h-3 w-3" />
-                </Button>
-              </div>
-              <div className="absolute bottom-0 left-0 right-0 bg-black/40 text-[9px] text-white px-1 py-0.5 truncate backdrop-blur-sm">
-                {(item.file.size / 1024).toFixed(0)} KB
-              </div>
-            </div>
-          ))}
-          {selectedFiles.length < MAX_FILES && (
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="h-20 w-20 sm:h-24 sm:w-24 rounded-lg border-2 border-dashed border-border/50 flex flex-col items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/50 transition-all bg-muted/20"
-            >
-              <Paperclip weight="duotone" className="h-6 w-6 mb-1" />
-              <span className="text-[10px]">Tambah</span>
-            </button>
-          )}
-        </div>
-      )}
-
-
-
-      {replyingTo && (
-        <div className={cn(
-          "relative bg-muted/50 border-x border-border/50 backdrop-blur-md px-4 py-3 flex items-start gap-3 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300",
-          selectedFiles.length > 0 ? "border-t border-border/20" : "rounded-t-xl border-t"
-        )}>
-          <div className="bg-primary/20 p-1.5 rounded-lg">
-            <ArrowBendUpLeft weight="duotone" className="h-3.5 w-3.5 text-primary" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-[11px] font-bold text-primary mb-0.5">
-              Replying to {replyingTo.user.username}
-            </div>
-            <div className="text-sm text-muted-foreground/80 line-clamp-1 italic">
-              "{replyingTo.content ? replyingTo.content.replace(/<@([a-zA-Z0-9_-]+)>/g, (match, uid) => {
-                if (uid === "everyone") return "@everyone";
-                const participant = roomData?.participants?.find((p: any) => p.user.id === uid);
-                return participant ? `@${participant.user.username}` : `@${uid}`;
-              }) : ""}"
-            </div>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
-            onClick={onCancelReply}
-          >
-            <X weight="duotone" className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
-
-      {/* Live Markdown Preview removed in favor of inline highlighting */}
-
+    <div className="flex flex-col px-3 sm:px-4 pb-2 sm:pb-3">
       {isImpersonating ? (
-        <div className="flex items-center justify-center gap-2 bg-muted/40 backdrop-blur-xl border border-border/50 rounded-xl p-4 text-sm text-muted-foreground">
-          <span className="text-destructive font-medium">Mode Impersonasi</span>
-          <span>— hanya bisa melihat pesan {impersonatedUser && `(@${impersonatedUser.username})`}</span>
+        <div className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
+          <span className="font-medium text-destructive">Mode impersonasi</span>
+          <span>— hanya bisa membaca{impersonatedUser && ` sebagai @${impersonatedUser.username}`}</span>
         </div>
       ) : (
-      <div
-        className={cn(
-          "flex items-end gap-1 bg-muted/40 backdrop-blur-xl border border-border/50 p-1.5 pr-2 shadow-2xl transition-all duration-300 ring-1 ring-black/5",
-          (replyingTo || selectedFiles.length > 0) ? "rounded-b-xl border-t-0" : "rounded-xl",
-        )}
-      >
-        <input
-          type="file"
-          multiple
-          ref={fileInputRef}
-          onChange={handleFileSelect}
-          className="hidden"
-          accept="image/*,video/*,.pdf,.doc,.docx,.txt"
-        />
+        <div className="rounded-lg border border-border bg-background transition-[border-color,box-shadow] focus-within:border-ring/50 focus-within:ring-2 focus-within:ring-ring/15">
+          {replyingTo && (
+            <div className="flex items-center gap-2 h-8 pl-3 pr-1 border-b border-border bg-muted/40 rounded-t-lg text-xs">
+              <ArrowBendUpLeft className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <p className="flex-1 min-w-0 truncate text-muted-foreground">
+                Membalas{" "}
+                <span className="font-medium text-foreground">
+                  {replyingTo.user?.name || replyingTo.user?.username}
+                </span>
+                <span className="mx-1.5 text-muted-foreground/50">·</span>
+                {replyExcerpt}
+              </p>
+              <button
+                type="button"
+                className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+                onClick={onCancelReply}
+                aria-label="Batal membalas"
+              >
+                <X weight="bold" className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
 
-        <div className="flex items-center gap-0.5 h-9 mb-0.5 shrink-0">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={() => fileInputRef.current?.click()}
-            className="h-8 w-8 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-          >
-            <Paperclip weight="duotone" className="h-4.5 w-4.5" />
-          </Button>
-          <EmojiPickerComponent
-            onEmojiSelect={(emoji) => {
-              setContent((prev) => prev + emoji);
-            }}
-          />
-        </div>
+          {selectedFiles.length > 0 && (
+            <div className={cn("flex gap-2 overflow-x-auto px-3 pt-3 pb-1", !replyingTo && "rounded-t-lg")}>
+              {filePreviews.map((item, index) => (
+                <div key={index} className="group/file relative shrink-0">
+                  <div className="h-20 w-20 overflow-hidden rounded-md border border-border bg-muted">
+                    {item.preview ? (
+                      item.file.type.startsWith("video/") ? (
+                        <div className="relative h-full w-full">
+                          <video src={item.preview} className="h-full w-full object-cover" />
+                          <span className="absolute inset-0 flex items-center justify-center">
+                            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white">
+                              <svg className="w-3.5 h-3.5 ml-px" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.841z" />
+                              </svg>
+                            </span>
+                          </span>
+                        </div>
+                      ) : (
+                        <img src={item.preview} alt={item.file.name} className="h-full w-full object-cover" />
+                      )
+                    ) : (
+                      <div className="flex h-full w-full flex-col items-center justify-center gap-1 p-1.5 text-center text-muted-foreground">
+                        <File className="h-5 w-5" />
+                        <span className="w-full truncate text-[10px]">{item.file.name}</span>
+                      </div>
+                    )}
+                  </div>
+                  <p className="mt-0.5 w-20 truncate text-[10px] text-muted-foreground tabular-nums">
+                    {formatSize(item.file.size)}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => removeFile(index)}
+                    className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-popover text-muted-foreground shadow-sm hover:text-destructive transition-colors"
+                    aria-label={`Hapus ${item.file.name}`}
+                  >
+                    <X weight="bold" className="h-2.5 w-2.5" />
+                  </button>
+                </div>
+              ))}
+              {selectedFiles.length < MAX_FILES && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="h-20 w-20 shrink-0 rounded-md border border-dashed border-border flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span className="text-[10px]">Tambah</span>
+                </button>
+              )}
+            </div>
+          )}
 
-        <MentionTextarea
-          value={content}
-          onChange={handleEditorChange}
-          onSubmit={handleEditorSubmit}
-          onKeyDown={handleKeyDown}
-          onBlur={handleEditorBlur}
-          placeholder={(() => {
-            if (roomData.isDirect) {
-              const partner = roomData.participants?.find((p) => p.user.id !== userId)?.user.username;
-              return partner ? `Kirim pesan ke @${partner}` : `Kirim pesan`;
-            }
-            return `Kirim pesan ke #${roomData.name}`;
-          })()}
-          className="flex-1"
-          maxHeight={200}
-          roomData={roomData}
-          currentUserId={userId}
-          inputRef={inputRef}
-          autoFocus={false}
-          draftKey={`chat-${roomData.id}`}
-        />
+          <div className={cn("flex items-end gap-0.5 px-1.5 py-0.5", hasTray && "pt-1")}>
+            <input
+              type="file"
+              multiple
+              ref={fileInputRef}
+              onChange={handleFileSelect}
+              className="hidden"
+              accept="image/*,video/*,.pdf,.doc,.docx,.txt"
+            />
 
-        <Button
-          onClick={() => handleSend()}
-          disabled={(!content.trim() && selectedFiles.length === 0) || isSending}
-          className="h-8 w-8 p-0 rounded-lg bg-primary hover:brightness-110 transition-all shrink-0 hover:scale-105 active:scale-95 shadow-lg shadow-primary/20 disabled:opacity-30 disabled:grayscale"
-        >          {isSending ? (
-          <div className="flex items-center justify-center gap-1">
-            {[0, 0.2, 0.4].map((delay, i) => (
-              <div
-                key={i}
-                className="h-1 w-1 bg-white rounded-full animate-bounce"
-                style={{ animationDelay: `${delay}s` }}
-              />
-            ))}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => fileInputRef.current?.click()}
+              className="h-8 w-8 mb-1 shrink-0 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
+              aria-label="Lampirkan file"
+              title="Lampirkan file"
+            >
+              <Paperclip className="h-[18px] w-[18px]" />
+            </Button>
+
+            <MentionTextarea
+              value={content}
+              onChange={handleEditorChange}
+              onSubmit={handleEditorSubmit}
+              onKeyDown={handleKeyDown}
+              onBlur={handleEditorBlur}
+              placeholder={(() => {
+                if (roomData.isDirect) {
+                  const partner = roomData.participants?.find((p) => p.user.id !== userId)?.user;
+                  return partner ? `Pesan untuk ${partner.name || "@" + partner.username}` : `Tulis pesan`;
+                }
+                return `Pesan ke #${roomData.name}`;
+              })()}
+              className="flex-1 min-w-0"
+              maxHeight={200}
+              roomData={roomData}
+              currentUserId={userId}
+              inputRef={inputRef}
+              autoFocus={false}
+              draftKey={`chat-${roomData.id}`}
+            />
+
+            <EmojiPickerComponent
+              onEmojiSelect={(emoji) => {
+                setContent((prev) => prev + emoji);
+              }}
+              triggerClassName="h-8 w-8 mb-1 shrink-0 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center justify-center"
+            />
+
+            <Button
+              onClick={() => handleSend()}
+              disabled={!canSend}
+              className={cn(
+                "h-8 w-8 mb-1 p-0 shrink-0 rounded-md transition-colors",
+                canSend
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                  : "bg-transparent text-muted-foreground/50 shadow-none"
+              )}
+              aria-label="Kirim pesan"
+              title="Kirim (Enter)"
+            >
+              <PaperPlaneRight weight="fill" className="h-4 w-4" />
+            </Button>
           </div>
-        ) : (
-          <ArrowBendUpLeft weight="duotone" className="h-4 w-4 rotate-90" />
-        )}
-        </Button>
-      </div>
+        </div>
       )}
 
-      <div className="h-5 text-sm text-muted-foreground italic transition-opacity duration-200 ease-in-out flex items-center">
-        {displayNames.length > 0 && (
-          <div className="flex items-center">
-            <span>
-              {displayNames.join(", ")} {displayNames.length > 1 ? "are" : "is"}{" "}
-              typing
-            </span>
-            <div className="flex items-center justify-center gap-0.5 pl-1 pt-2">
+      <div className="h-5 flex items-center px-1 text-[11px] text-muted-foreground" aria-live="polite">
+        {displayNames.length > 0 ? (
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="inline-flex gap-[3px] items-center shrink-0" aria-hidden>
               {[0, 1, 2].map((i) => (
                 <span
                   key={i}
-                  className="w-1 h-1 bg-muted-foreground rounded-full animate-bounce"
+                  className="w-1 h-1 bg-muted-foreground rounded-full animate-pulse"
                   style={{ animationDelay: `${i * 0.2}s` }}
                 />
               ))}
-            </div>
+            </span>
+            <span className="truncate">
+              <span className="font-medium text-foreground/80">
+                {displayNames.length > 2
+                  ? `${displayNames.slice(0, 2).join(", ")} dan ${displayNames.length - 2} lainnya`
+                  : displayNames.join(" dan ")}
+              </span>{" "}
+              sedang mengetik…
+            </span>
           </div>
+        ) : (
+          <span className="hidden md:inline text-muted-foreground/70">
+            <kbd className="font-sans font-medium">Enter</kbd> kirim
+            <span className="mx-1.5">·</span>
+            <kbd className="font-sans font-medium">Shift + Enter</kbd> baris baru
+            <span className="mx-1.5">·</span>
+            <kbd className="font-sans font-medium">↑</kbd> edit pesan terakhir
+          </span>
         )}
       </div>
     </div>
