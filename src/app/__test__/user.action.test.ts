@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { authState, resetAuthState } from "./auth-test-state";
 import {
   updateUserAction,
   changePasswordAction,
@@ -13,18 +14,22 @@ import { searchUserController } from "@/lib/interface-adapters/controllers/users
 import { getProfileController } from "@/lib/interface-adapters/controllers/users/get-profile.controller";
 import { getSharedMediaController } from "@/lib/interface-adapters/controllers/users/get-shared-media.controller";
 
-vi.mock("@/lib/impersonate.guard", () => ({ requireNoImpersonation: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/app/auth.action", async () => (await import("./auth-test-state")).authActionMock());
+vi.mock("@/lib/impersonate.guard", async () => (await import("./auth-test-state")).impersonateMock());
+vi.mock("@/lib/infrastructure/repositories/room.repository", async () => (await import("./auth-test-state")).roomRepoMock());
+vi.mock("@/lib/infrastructure/repositories/message.repository", async () => (await import("./auth-test-state")).messageRepoMock());
+vi.mock("@/lib/db", () => ({ db: {} }));
 
 vi.mock("@/lib/interface-adapters/controllers/users/update.controller", () => ({ updateUserController: vi.fn() }));
 vi.mock("@/lib/interface-adapters/controllers/users/change-password.controller", () => ({ changePasswordController: vi.fn() }));
 vi.mock("@/lib/interface-adapters/controllers/users/search.controller", () => ({ searchUserController: vi.fn() }));
 vi.mock("@/lib/interface-adapters/controllers/users/get-profile.controller", () => ({ getProfileController: vi.fn() }));
 vi.mock("@/lib/interface-adapters/controllers/users/get-shared-media.controller", () => ({ getSharedMediaController: vi.fn() }));
-vi.mock("../auth.action", () => ({ getUserWithRolesFromSession: vi.fn().mockResolvedValue({ id: "user1" }) }));
 
 describe("user.action", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetAuthState();
   });
 
   describe("updateUserAction", () => {
@@ -81,6 +86,27 @@ describe("user.action", () => {
 
       const res = await getSharedMediaAction("u1", "alice");
       expect(res).toEqual({ status: "success", data: mockMedia, error: null });
+    });
+  });
+
+  describe("authorization", () => {
+    it("refuses to change another user's password", async () => {
+      const res = await changePasswordAction("victim", { oldPassword: "x", newPassword: "newpass" });
+      expect(res.status).toBe("error");
+      expect(changePasswordController).not.toHaveBeenCalled();
+    });
+
+    it("refuses to update another user's profile", async () => {
+      const res = await updateUserAction("victim", { bio: "pwned" });
+      expect(res.status).toBe("error");
+      expect(updateUserController).not.toHaveBeenCalled();
+    });
+
+    it("requires a session to search users", async () => {
+      authState.sessionUserId = null;
+      const res = await searchUsersAction("bob");
+      expect(res.status).toBe("error");
+      expect(searchUserController).not.toHaveBeenCalled();
     });
   });
 });

@@ -1,3 +1,4 @@
+import { roomChannel } from "@/lib/pusher/channels";
 import { MessageWithUserDTO } from "../../../entities/models/message.model";
 import { IMessageRepository } from "../../repositories/message.repository.interface";
 import { IPusherService } from "../../services/pusher.service.interface";
@@ -25,7 +26,7 @@ export class EditMessageUseCase {
 
         const updatedMessage = await this.messageRepository.updateMessage(messageId, content);
 
-        await this.pusherService.trigger(`chat-${updatedMessage.roomId}`, "message-updated", updatedMessage);
+        await this.pusherService.trigger(roomChannel(updatedMessage.roomId), "message-updated", updatedMessage);
 
         return updatedMessage;
     }

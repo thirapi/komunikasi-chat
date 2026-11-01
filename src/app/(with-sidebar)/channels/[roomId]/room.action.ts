@@ -1,5 +1,12 @@
 "use server";
-import { requireNoImpersonation } from "@/lib/impersonate.guard";
+import {
+  AuthorizationError,
+  assertCanReadRoom,
+  assertRoomMember,
+  getRoomAccess,
+  requireReader,
+  requireWriter,
+} from "@/lib/auth/actor";
 import { ServerResponse } from "@/lib/entities/models/response.model";
 import { RoomWithParticipantsDTO } from "@/lib/entities/models/room.model";
 import { createRoomController } from "@/lib/interface-adapters/controllers/rooms/create-room.controller";
@@ -13,7 +20,8 @@ export const getSidebarData = async (
   userId: string
 ): Promise<ServerResponse<{ channels: SidebarRoomDTO[]; directMessages: SidebarRoomDTO[] }>> => {
   try {
-    const data = await getSidebarDataController(userId);
+    // Always the viewer's own sidebar, whatever id the client sends.
+    const data = await getSidebarDataController(await requireReader());
 
     return {
       status: "success",
@@ -42,6 +50,7 @@ export const getRoom = async (
   roomId: string
 ): Promise<ServerResponse<RoomWithParticipantsDTO | null>> => {
   try {
+    await assertCanReadRoom(roomId, await requireReader());
     const room = await getRoomByIdController(roomId);
 
     return {
@@ -67,7 +76,7 @@ export const getRoomsByUserId = async (
   options?: { isDirect?: boolean }
 ): Promise<ServerResponse<RoomWithParticipantsDTO[] | null>> => {
   try {
-    const rooms = await getRoomByUserIdController(userId, options);
+    const rooms = await getRoomByUserIdController(await requireReader(), options);
 
     return {
       status: "success",
@@ -94,8 +103,9 @@ export const createRoom = async (
   targetUserId: string
 ):  Promise<ServerResponse<RoomWithParticipantsDTO | null> & { meta?: { action: "existing" | "created" } }> => {
   try {
-    await requireNoImpersonation();
-    const response = await startDirectMessageController(currentUserId, targetUserId);
+    const actorId = await requireWriter(currentUserId);
+    if (targetUserId === actorId) throw new AuthorizationError("Tidak bisa mengirim pesan ke diri sendiri");
+    const response = await startDirectMessageController(actorId, targetUserId);
 
     return {
       status: "success",
@@ -122,14 +132,14 @@ export const createChannel = async (
   isPublic: boolean = false
 ): Promise<ServerResponse<RoomWithParticipantsDTO | null>> => {
   try {
-    await requireNoImpersonation();
+    const actorId = await requireWriter(userId);
     const newRoom = await createRoomController({
       name,
       isDirect: false,
-      participantIds: [userId],
+      participantIds: [actorId],
       description,
       isPublic,
-      ownerId: userId,
+      ownerId: actorId,
     });
 
     revalidatePath("/");
@@ -156,7 +166,7 @@ export const getPublicRooms = async (
   userId: string
 ): Promise<ServerResponse<RoomWithParticipantsDTO[]>> => {
   try {
-    const rooms = await getPublicRoomsController(userId);
+    const rooms = await getPublicRoomsController(await requireReader());
 
     return {
       status: "success",
@@ -181,8 +191,15 @@ export const joinRoom = async (
   userId: string
 ): Promise<ServerResponse<boolean>> => {
   try {
-    await requireNoImpersonation();
-    await joinRoomController(roomId, userId);
+    const actorId = await requireWriter(userId);
+    // This endpoint only joins public channels. Private channels are joined
+    // through an invite (inviteToChannel) or the invite link page, which
+    // performs its own checks server-side.
+    const access = await getRoomAccess(roomId, actorId);
+    if (!access.exists || access.isDirect || !access.isPublic) {
+      throw new AuthorizationError("Channel ini privat. Minta undangan dari pemiliknya.");
+    }
+    if (!access.isMember) await joinRoomController(roomId, actorId);
 
     revalidatePath("/");
 
@@ -210,8 +227,8 @@ export const removeParticipant = async (
   requesterId: string
 ): Promise<ServerResponse<boolean>> => {
   try {
-    await requireNoImpersonation();
-    await removeParticipantController(roomId, userId, requesterId);
+    const actorId = await requireWriter(requesterId);
+    await removeParticipantController(roomId, userId, actorId);
 
     revalidatePath("/");
 
@@ -239,8 +256,8 @@ export const updateChannel = async (
   data: { name?: string; description?: string; isPublic?: boolean; avatar?: string; banner?: string }
 ): Promise<ServerResponse<boolean>> => {
   try {
-    await requireNoImpersonation();
-    await updateRoomController(roomId, requesterId, data);
+    const actorId = await requireWriter(requesterId);
+    await updateRoomController(roomId, actorId, data);
     revalidatePath("/");
     return { status: "success", data: true, error: null };
   } catch (err: any) {
@@ -257,8 +274,8 @@ export const deleteChannel = async (
   requesterId: string
 ): Promise<ServerResponse<boolean>> => {
   try {
-    await requireNoImpersonation();
-    await deleteRoomController(roomId, requesterId);
+    const actorId = await requireWriter(requesterId);
+    await deleteRoomController(roomId, actorId);
     revalidatePath("/");
     return { status: "success", data: true, error: null };
   } catch (err: any) {
@@ -275,6 +292,7 @@ export const searchInvitableUsers = async (
   query: string
 ): Promise<ServerResponse<{ id: string; username: string; avatar: string}[]>> => {
   try {
+    await assertRoomMember(roomId, await requireReader());
     const users = await searchInvitableUsersController(roomId, query);
     return { status: "success", data: users, error: null };
   } catch (err: any) {
@@ -292,8 +310,9 @@ export const inviteToChannel = async (
   targetUserId: string
 ): Promise<ServerResponse<boolean>> => {
   try {
-    await requireNoImpersonation();
-    await inviteToRoomController(roomId, requesterId, targetUserId);
+    const actorId = await requireWriter(requesterId);
+    await assertRoomMember(roomId, actorId);
+    await inviteToRoomController(roomId, actorId, targetUserId);
     revalidatePath("/");
     return { status: "success", data: true, error: null };
   } catch (err: any) {

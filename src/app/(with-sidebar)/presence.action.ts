@@ -5,6 +5,7 @@ import { UpstashPresenceService } from "@/lib/infrastructure/services/upstash-pr
 import { PusherService } from "@/lib/infrastructure/services/pusher.service";
 import { UpdatePresenceUseCase } from "@/lib/application/use-cases/presence/update-presence.use-case";
 import { ServerResponse } from "@/lib/entities/models/response.model";
+import { AuthorizationError, getActor } from "@/lib/auth/actor";
 
 const presenceService = new UpstashPresenceService();
 const pusherService = new PusherService();
@@ -15,7 +16,12 @@ export const updatePresenceAction = async (
     status: "online" | "offline"
 ): Promise<ServerResponse<null>> => {
     try {
-        await updatePresenceUseCase.execute(userId, status);
+        const actor = await getActor();
+        // Presence is about the person at the keyboard; an admin viewing as
+        // someone must not mark that user online.
+        if (actor.isImpersonating) return { status: "success", data: null, error: null };
+        if (userId && userId !== actor.sessionUserId) throw new AuthorizationError();
+        await updatePresenceUseCase.execute(actor.sessionUserId, status);
         return {
             status: "success",
             data: null,

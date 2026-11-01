@@ -1,6 +1,18 @@
 "use server";
 
-import { requireNoImpersonation } from "@/lib/impersonate.guard";
+import {
+  AuthorizationError,
+  assertCanReadRoom,
+  assertMessageRoomMember,
+  assertRoomMember,
+  getActor,
+  getMessageRoomId,
+  requireReader,
+  requireWriter,
+} from "@/lib/auth/actor";
+
+/** Storage folders the client may upload into (besides `channels/<roomId>`). */
+const UPLOAD_FOLDERS = new Set(["avatars", "banners", "room-avatars", "room-banners"]);
 import { ServerResponse } from "@/lib/entities/models/response.model";
 import { getMessageController } from "@/lib/interface-adapters/controllers/messages/get-message.controller";
 import { sendMessageController } from "@/lib/interface-adapters/controllers/messages/send-message.controller";
@@ -24,8 +36,9 @@ export const toggleReactionAction = async (
   emoji: string
 ): Promise<ServerResponse<{ action: "added" | "removed" } | null>> => {
   try {
-    await requireNoImpersonation();
-    const result = await toggleReactionController(userId, messageId, emoji);
+    const actorId = await requireWriter(userId);
+    await assertMessageRoomMember(messageId, actorId);
+    const result = await toggleReactionController(actorId, messageId, emoji);
     return {
       status: "success",
       data: { action: result.action },
@@ -50,10 +63,12 @@ export const setTypingStatusAction = async (
   typing: boolean
 ): Promise<ServerResponse<null>> => {
   try {
+    const actorId = await requireWriter(userId);
+    await assertRoomMember(roomId, actorId);
     if (typing) {
-      await startTypingController(userId, roomId);
+      await startTypingController(actorId, roomId);
     } else {
-      await stopTypingController(userId, roomId);
+      await stopTypingController(actorId, roomId);
     }
     return {
       status: "success",
@@ -80,7 +95,10 @@ export const searchMessagesAction = async (
   limit?: number
 ): Promise<ServerResponse<MessageWithUserDTO[]>> => {
   try {
-    const data = await searchMessagesController(query, roomId, limit);
+    const viewerId = await requireReader();
+    if (roomId) await assertCanReadRoom(roomId, viewerId);
+    // Global search is limited to the viewer's rooms inside the repository.
+    const data = await searchMessagesController(query, roomId, Math.min(limit ?? 20, 50), viewerId);
 
     return {
       status: "success",
@@ -106,8 +124,8 @@ export const deleteMessageAction = async (
   messageId: string
 ): Promise<ServerResponse<null>> => {
   try {
-    await requireNoImpersonation();
-    await deleteMessageController(userId, messageId);
+    const actorId = await requireWriter(userId);
+    await deleteMessageController(actorId, messageId);
 
     return {
       status: "success",
@@ -134,8 +152,8 @@ export const editMessageAction = async (
   content: string
 ): Promise<ServerResponse<MessageWithUserDTO | null>> => {
   try {
-    await requireNoImpersonation();
-    const data = await editMessageController(userId, messageId, content);
+    const actorId = await requireWriter(userId);
+    const data = await editMessageController(actorId, messageId, content);
 
     return {
       status: "success",
@@ -165,8 +183,14 @@ export const createMessage = async (
   optimisticId?: string
 ): Promise<ServerResponse<MessageWithUserDTO | null>> => {
   try {
-    await requireNoImpersonation();
-    const data = await sendMessageController(userId, content, roomId, replyTo, attachments, optimisticId);
+    const actorId = await requireWriter(userId);
+    await assertRoomMember(roomId, actorId);
+    // A reply may only point at a message in the same room; otherwise it would
+    // leak a quote of another room's message into this one.
+    if (replyTo && (await getMessageRoomId(replyTo)) !== roomId) {
+      throw new AuthorizationError("Pesan yang dibalas tidak ditemukan di room ini");
+    }
+    const data = await sendMessageController(actorId, content, roomId, replyTo, attachments, optimisticId);
 
     return {
       status: "success",
@@ -189,7 +213,9 @@ export const createMessage = async (
 
 export const getMessage = async (roomId: string, limit?: number, before?: Date, after?: Date) => {
   try {
-    const message = await getMessageController(roomId, limit, before, after);
+    const viewerId = await requireReader();
+    await assertCanReadRoom(roomId, viewerId);
+    const message = await getMessageController(roomId, Math.min(limit ?? 50, 100), before, after);
 
     return {
       status: "success",
@@ -215,7 +241,15 @@ export const uploadFileAction = async (
   destination?: string
 ): Promise<ServerResponse<{ fileurl: string; filename: string; size: number; mimetype: string } | null>> => {
   try {
-    await requireNoImpersonation();
+    const actorId = await requireWriter();
+    // Uploads land in a fixed set of folders. A channel folder additionally
+    // requires membership, so nobody can write into another room's storage.
+    const channelMatch = destination?.match(/^channels\/([A-Za-z0-9_-]+)$/);
+    if (channelMatch) {
+      await assertRoomMember(channelMatch[1], actorId);
+    } else if (destination && !UPLOAD_FOLDERS.has(destination)) {
+      throw new AuthorizationError("Tujuan upload tidak valid");
+    }
     const file = formData.get("file") as File;
     if (!file) {
       return {
@@ -253,15 +287,13 @@ export const updateLastReadAt = async (
   lastReadAt?: Date
 ): Promise<ServerResponse<null>> => {
   try {
-    if (!userId || userId === "" || userId === "null") {
-      return {
-        status: "error",
-        data: null,
-        error: { message: "User ID is required", type: "ValidationError" },
-      };
-    }
+    const actor = await getActor();
+    // An admin viewing as someone must not mark that person's messages read.
+    if (actor.isImpersonating) return { status: "success", data: null, error: null };
+    if (userId && userId !== actor.sessionUserId) throw new AuthorizationError();
+    await assertRoomMember(roomId, actor.sessionUserId);
 
-    await updateLastReadAtController(userId, roomId, messageId, lastReadAt);
+    await updateLastReadAtController(actor.sessionUserId, roomId, messageId, lastReadAt);
 
     // No revalidatePath here on purpose: read state is a hot, throttled path
     // (every viewport intersection, own-message receipt, visibilitychange and
@@ -293,7 +325,8 @@ export const getLastReadAt = async (
   roomId: string
 ): Promise<ServerResponse<{ id: string | null; at: Date | null } | null>> => {
   try {
-    const lastReadAt = await getLastReadAtController(userId, roomId);
+    const viewerId = await requireReader();
+    const lastReadAt = await getLastReadAtController(viewerId, roomId);
 
     return {
       status: "success",

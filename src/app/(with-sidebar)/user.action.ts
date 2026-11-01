@@ -1,6 +1,6 @@
 "use server";
 
-import { requireNoImpersonation } from "@/lib/impersonate.guard";
+import { getOptionalViewer, requireReader, requireWriter } from "@/lib/auth/actor";
 import { ServerResponse } from "@/lib/entities/models/response.model";
 import { UserRecord } from "@/lib/entities/models/user.model";
 import { AttachmentWithMessageDTO } from "@/lib/entities/models/attachment.model";
@@ -15,8 +15,8 @@ export const updateUserAction = async (
   user: Partial<UserRecord>
 ): Promise<ServerResponse<null>> => {
   try {
-    await requireNoImpersonation();
-    await updateUserController(userId, user);
+    const actorId = await requireWriter(userId);
+    await updateUserController(actorId, user);
 
     return {
       status: "success",
@@ -41,7 +41,8 @@ export const changePasswordAction = async (
   data: { oldPassword?: string; newPassword: string }
 ): Promise<ServerResponse<null>> => {
   try {
-    await changePasswordController(userId, data);
+    const actorId = await requireWriter(userId);
+    await changePasswordController(actorId, data);
     return {
       status: "success",
       data: null,
@@ -65,6 +66,8 @@ export const searchUsersAction = async (query: string): Promise<ServerResponse<{
     // keystroke in the user search dialogs, and SearchUserUseCase does not
     // consume the caller's identity. It was costing a full session + roles
     // lookup (~6 queries) per character typed.
+    // Only the cheap session check (cached per request), not the roles lookup.
+    await requireReader();
     const users = await searchUserController(query, 10);
     return {
       status: "success",
@@ -85,7 +88,8 @@ export const searchUsersAction = async (query: string): Promise<ServerResponse<{
 
 export const getPublicProfileAction = async (username: string, currentUserId?: string): Promise<ServerResponse<any>> => {
   try {
-    const user = await getProfileController(username, currentUserId);
+    // Profiles are public; the viewer (if any) only personalises the result.
+    const user = await getProfileController(username, (await getOptionalViewer()) ?? undefined);
     return {
       status: "success",
       data: user,
@@ -105,7 +109,10 @@ export const getPublicProfileAction = async (username: string, currentUserId?: s
 
 export const getSharedMediaAction = async (currentUserId: string, profileUsername: string): Promise<ServerResponse<AttachmentWithMessageDTO[]>> => {
   try {
-    const media = await getSharedMediaController(currentUserId, profileUsername);
+    // "Shared" media is between the viewer and that profile, so it needs a viewer.
+    const viewerId = await getOptionalViewer();
+    if (!viewerId) return { status: "success", data: [], error: null };
+    const media = await getSharedMediaController(viewerId, profileUsername);
     return {
       status: "success",
       data: media,

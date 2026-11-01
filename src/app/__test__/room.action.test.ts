@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { authState, resetAuthState } from "./auth-test-state";
 import {
   getSidebarData,
   getRoom,
@@ -23,7 +24,11 @@ import { updateRoomController, deleteRoomController } from "@/lib/interface-adap
 import { inviteToRoomController } from "@/lib/interface-adapters/controllers/rooms/invite-to-room.controller";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/impersonate.guard", () => ({ requireNoImpersonation: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/app/auth.action", async () => (await import("./auth-test-state")).authActionMock());
+vi.mock("@/lib/impersonate.guard", async () => (await import("./auth-test-state")).impersonateMock());
+vi.mock("@/lib/infrastructure/repositories/room.repository", async () => (await import("./auth-test-state")).roomRepoMock());
+vi.mock("@/lib/infrastructure/repositories/message.repository", async () => (await import("./auth-test-state")).messageRepoMock());
+vi.mock("@/lib/db", () => ({ db: {} }));
 
 vi.mock("@/lib/interface-adapters/controllers/rooms/get-sidebar-data.controller", () => ({ getSidebarDataController: vi.fn() }));
 vi.mock("@/lib/interface-adapters/controllers/rooms/get-room-by-id.controller", () => ({ getRoomByIdController: vi.fn() }));
@@ -45,6 +50,7 @@ vi.mock("@/lib/interface-adapters/controllers/rooms/invite-to-room.controller", 
 describe("room.action", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetAuthState();
   });
 
   describe("getSidebarData", () => {
@@ -96,10 +102,26 @@ describe("room.action", () => {
   });
 
   describe("joinRoom", () => {
-    it("joins a room successfully", async () => {
+    it("joins a public channel", async () => {
+      authState.access = { exists: true, isMember: false, isPublic: true, isDirect: false, ownerId: "owner1" };
       vi.mocked(joinRoomController).mockResolvedValueOnce(undefined as any);
       const res = await joinRoom("r1", "user1");
       expect(res).toEqual({ status: "success", data: true, error: null });
+      expect(joinRoomController).toHaveBeenCalledWith("r1", "user1");
+    });
+
+    it("refuses to join a private channel through the public endpoint", async () => {
+      authState.access = { exists: true, isMember: false, isPublic: false, isDirect: false, ownerId: "owner1" };
+      const res = await joinRoom("r1", "user1");
+      expect(res.status).toBe("error");
+      expect(joinRoomController).not.toHaveBeenCalled();
+    });
+
+    it("refuses to join a direct message", async () => {
+      authState.access = { exists: true, isMember: false, isPublic: true, isDirect: true, ownerId: null };
+      const res = await joinRoom("dm1", "user1");
+      expect(res.status).toBe("error");
+      expect(joinRoomController).not.toHaveBeenCalled();
     });
   });
 
@@ -120,10 +142,59 @@ describe("room.action", () => {
   });
 
   describe("inviteToChannel", () => {
-    it("invites user to a channel", async () => {
+    it("invites user to a channel as the signed-in member", async () => {
       vi.mocked(inviteToRoomController).mockResolvedValueOnce(undefined as any);
-      const res = await inviteToChannel("r1", "owner1", "user2");
+      const res = await inviteToChannel("r1", "user1", "user2");
       expect(res).toEqual({ status: "success", data: true, error: null });
+      expect(inviteToRoomController).toHaveBeenCalledWith("r1", "user1", "user2");
+    });
+
+    it("rejects a forged requester id", async () => {
+      const res = await inviteToChannel("r1", "owner1", "user2");
+      expect(res.status).toBe("error");
+      expect(inviteToRoomController).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("authorization", () => {
+    it("rejects every action without a session", async () => {
+      authState.sessionUserId = null;
+      expect((await getRoom("r1")).status).toBe("error");
+      expect((await createChannel("x", "user1")).status).toBe("error");
+      expect(getRoomByIdController).not.toHaveBeenCalled();
+      expect(createRoomController).not.toHaveBeenCalled();
+    });
+
+    it("does not let a non-member read a private room", async () => {
+      authState.access = { exists: true, isMember: false, isPublic: false, isDirect: false, ownerId: "owner1" };
+      const res = await getRoom("r1");
+      expect(res.status).toBe("error");
+      expect(getRoomByIdController).not.toHaveBeenCalled();
+    });
+
+    it("lets a non-member preview a public channel", async () => {
+      authState.access = { exists: true, isMember: false, isPublic: true, isDirect: false, ownerId: "owner1" };
+      vi.mocked(getRoomByIdController).mockResolvedValueOnce({ id: "r1" } as any);
+      expect((await getRoom("r1")).status).toBe("success");
+    });
+
+    it("uses the session user, not the client-supplied id, for channel updates", async () => {
+      const res = await updateChannel("r1", "victim", { name: "pwned" });
+      expect(res.status).toBe("error");
+      expect(updateRoomController).not.toHaveBeenCalled();
+    });
+
+    it("loads the viewer's own sidebar whatever id is passed", async () => {
+      vi.mocked(getSidebarDataController).mockResolvedValueOnce({ channels: [], directMessages: [] } as any);
+      await getSidebarData("someone-else");
+      expect(getSidebarDataController).toHaveBeenCalledWith("user1");
+    });
+
+    it("blocks writes while an admin is impersonating", async () => {
+      authState.impersonatedUserId = "user9";
+      const res = await createChannel("x", "user1");
+      expect(res.status).toBe("error");
+      expect(createRoomController).not.toHaveBeenCalled();
     });
   });
 });

@@ -21,6 +21,12 @@ export class UpdateUserRolesUseCase {
       }
     }
 
+    // Only a super admin can hand out super admin, otherwise any admin could
+    // promote themselves above their own level.
+    if (newRole.includes("super_admin") && !(await this.roleService.hasRole(actorUserId, "super_admin"))) {
+      throw new UnauthorizedError("Only a super admin can grant the super_admin role.");
+    }
+
     const roles = await this.roleRepository.findByNames(newRole);
     const roleIds = roles.map((r) => r.id);
     await this.userRepository.updateUserRoles(targetUserId, roleIds);

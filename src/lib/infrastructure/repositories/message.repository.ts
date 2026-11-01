@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
-import { messages, attachments as attachmentsTable } from "@/lib/infrastructure/drizzle/schema";
-import { eq, asc, desc, lt, gt, and, ilike, or, like } from "drizzle-orm";
+import { messages, attachments as attachmentsTable, roomParticipants } from "@/lib/infrastructure/drizzle/schema";
+import { eq, asc, desc, lt, gt, and, ilike, or, like, inArray } from "drizzle-orm";
 import { IMessageRepository } from "@/lib/application/repositories/message.repository.interface";
 import {
   MessageWithUserDTO,
@@ -265,10 +265,26 @@ export class MessageRepository implements IMessageRepository {
     }));
   }
 
-  async searchMessages(query: string, roomId?: string, limit: number = 20): Promise<MessageWithUserDTO[]> {
-    const filters = [ilike(messages.content, `%${query}%`), eq(messages.isDeleted, false)];
+  async searchMessages(query: string, roomId?: string, limit: number = 20, viewerId?: string): Promise<MessageWithUserDTO[]> {
+    // Escape LIKE wildcards so "%" or "_" typed by the user match literally.
+    const pattern = `%${query.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const filters = [ilike(messages.content, pattern), eq(messages.isDeleted, false)];
     if (roomId) {
+      // The caller has already checked that the viewer may read this room.
       filters.push(eq(messages.roomId, roomId));
+    } else {
+      // Global search only ever covers rooms the viewer belongs to. Without a
+      // viewer there is nothing they are allowed to see: fail closed.
+      if (!viewerId) return [];
+      filters.push(
+        inArray(
+          messages.roomId,
+          this.client
+            .select({ roomId: roomParticipants.roomId })
+            .from(roomParticipants)
+            .where(eq(roomParticipants.userId, viewerId)),
+        ),
+      );
     }
 
     const results = await this.client.query.messages.findMany({

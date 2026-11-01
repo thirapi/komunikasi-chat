@@ -35,4 +35,8 @@ export interface IRoomRepository {
   updateRoom(roomId: string, data: { name?: string; description?: string; isPublic?: boolean; avatar?: string; banner?: string }): Promise<void>;
   deleteRoom(roomId: string): Promise<void>;
   fallbackLastReadMessageId(roomId: string, deletedMessageId: string, fallbackBeforeDate: Date): Promise<void>;
+  getRoomAccess(
+    roomId: string,
+    userId: string,
+  ): Promise<{ exists: boolean; isMember: boolean; isPublic: boolean; isDirect: boolean; ownerId: string | null }>;
 }

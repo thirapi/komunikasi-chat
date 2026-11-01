@@ -5,6 +5,6 @@ import { db } from "@/lib/db";
 const messageRepository = new MessageRepository(db);
 const searchMessagesUseCase = new SearchMessagesUseCase(messageRepository);
 
-export const searchMessagesController = async (query: string, roomId?: string, limit?: number) => {
-  return await searchMessagesUseCase.execute(query, roomId, limit);
+export const searchMessagesController = async (query: string, roomId?: string, limit?: number, viewerId?: string) => {
+  return await searchMessagesUseCase.execute(query, roomId, limit, viewerId);
 };

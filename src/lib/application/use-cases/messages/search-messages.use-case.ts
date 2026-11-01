@@ -4,10 +4,10 @@ import { IMessageRepository } from "../../repositories/message.repository.interf
 export class SearchMessagesUseCase {
   constructor(private messageRepository: IMessageRepository) { }
 
-  async execute(query: string, roomId?: string, limit?: number): Promise<MessageWithUserDTO[]> {
+  async execute(query: string, roomId?: string, limit?: number, viewerId?: string): Promise<MessageWithUserDTO[]> {
     if (!query || query.trim().length < 2) {
       return [];
     }
-    return await this.messageRepository.searchMessages(query.trim(), roomId, limit);
+    return await this.messageRepository.searchMessages(query.trim(), roomId, limit, viewerId);
   }
 }

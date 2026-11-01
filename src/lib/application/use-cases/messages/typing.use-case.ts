@@ -1,3 +1,4 @@
+import { roomChannel } from "@/lib/pusher/channels";
 import { IUserRepository } from "../../repositories/user.repository.interface";
 import { IPusherService } from "../../services/pusher.service.interface";
 
@@ -13,7 +14,7 @@ export class TypingUseCase {
       const user = await this.userRepository.findById(userId);
       if (!user) throw new Error("User not found");
 
-      await this.pusherService.trigger(`chat-${roomId}`, "user-typing", {
+      await this.pusherService.trigger(roomChannel(roomId), "user-typing", {
         userId,
         username: user.username,
         typing: true,
@@ -26,7 +27,7 @@ export class TypingUseCase {
   async stopTyping(userId: string, roomId: string): Promise<void> {
     if (!userId) return; // Prevent unnecessary calls if userId is empty
     try {
-      await this.pusherService.trigger(`chat-${roomId}`, "user-typing", {
+      await this.pusherService.trigger(roomChannel(roomId), "user-typing", {
         userId,
         typing: false,
       });
