@@ -118,10 +118,6 @@
     border-color: rgba(255, 255, 255, 0.1);
   }
 
-  .glass-morphism {
-    @apply bg-background/30 backdrop-blur-xl border border-border/10;
-  }
-
   /* Interactive Post Card */
   .post-card-hover {
     @apply transition-colors duration-200 cursor-pointer 

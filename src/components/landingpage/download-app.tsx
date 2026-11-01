@@ -1,4 +1,5 @@
 import * as React from "react";
+import Image from "next/image";
 import { DownloadSimple, ShieldCheck, ArrowSquareOut } from "@phosphor-icons/react/dist/ssr";
 import { Button } from "@/components/ui/button";
 import { getLatestAndroidRelease } from "@/lib/latest-release";
@@ -18,6 +19,10 @@ function formatDate(iso: string): string {
  * than a store: the APK is served over HTTPS, its SHA-256 is published beside
  * it, and the signing key is the one the project has always used, so a sideload
  * is verifiable rather than a leap of faith.
+ *
+ * Bordered rather than elevated. The card sits directly below the sign-in form
+ * on the same background, so a shadow would imply it floats above something it
+ * is not floating above.
  */
 export async function DownloadApp() {
   const release = await getLatestAndroidRelease();
@@ -29,14 +34,32 @@ export async function DownloadApp() {
   return (
     <section
       aria-labelledby="download-app-heading"
-      className="glass-morphism w-full max-w-md rounded-2xl p-5 shadow-2xl"
+      className="flex w-full max-w-md flex-col gap-4 rounded-xl border border-border p-5"
     >
-      <div className="flex items-start gap-3">
-        <div className="flex-1">
-          <h2 id="download-app-heading" className="text-sm font-semibold tracking-tight">
+      <div className="flex items-center gap-3">
+        {/*
+          next/image rather than a plain <img>: the source is a 512px PNG and it
+          renders at 40px, so the loader is doing real work. `sizes` keeps it
+          from fetching a larger variant than the slot needs.
+        */}
+        <Image
+          src="/icons/maskable_icon.png"
+          alt=""
+          aria-hidden
+          width={512}
+          height={512}
+          sizes="40px"
+          className="size-10 shrink-0 rounded-lg"
+        />
+
+        <div className="min-w-0 flex-1">
+          <h2
+            id="download-app-heading"
+            className="text-sm font-semibold tracking-tight"
+          >
             Aplikasi Android
           </h2>
-          <p className="mt-1 text-xs text-foreground/60">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             Versi {release.version}
             {release.size && ` · ${release.size}`}
             {release.publishedAt && ` · ${formatDate(release.publishedAt)}`}
@@ -44,7 +67,7 @@ export async function DownloadApp() {
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button asChild size="sm" className="gap-2">
           <a href={release.downloadUrl} rel="noopener noreferrer">
             <DownloadSimple weight="bold" aria-hidden className="h-4 w-4" />
@@ -60,7 +83,7 @@ export async function DownloadApp() {
       </div>
 
       {release.checksum && (
-        <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-relaxed text-foreground/50">
+        <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-muted-foreground">
           <ShieldCheck aria-hidden className="mt-px h-3.5 w-3.5 shrink-0" />
           <span>
             SHA-256{" "}

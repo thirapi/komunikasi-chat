@@ -81,7 +81,10 @@ export function SignInForm({
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card className="border-border/40 shadow-lg transition-all duration-300 hover:shadow-xl">
+      {/* No shadow override: Card already carries shadow-sm, and layering a
+          larger one on top only muddied the edge on the landing page where the
+          form sits flat against the background. */}
+      <Card className="border-border">
         <CardHeader>
           <CardTitle className="text-2xl font-bold">Login</CardTitle>
           <CardDescription>
