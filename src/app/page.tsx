@@ -1,6 +1,7 @@
 import { getUserSession } from "@/app/auth.action";
 import { redirect } from "next/navigation";
-import { LoginShell } from "@/components/landingpage/login-shell";
+import { AuthShell } from "@/components/landingpage/auth-shell";
+import { SignInForm } from "@/app/signin/sign-in-form";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -42,7 +43,9 @@ export default async function House() {
           }),
         }}
       />
-      <LoginShell />
+      <AuthShell switchTo={{ href: "/signup", label: "Daftar" }}>
+        <SignInForm />
+      </AuthShell>
     </>
   );
 }

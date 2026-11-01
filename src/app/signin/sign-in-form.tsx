@@ -45,11 +45,13 @@ export function SignInForm({
     setPending(true);
     setError(null);
     const response = await signInUser(values.username, values.password, callbackUrl ?? undefined);
-    // On success the action redirects, so only the error path returns here.
+    // On success the action redirects and the router swaps the page, so the
+    // button stays in its pending state until then instead of flashing back
+    // to "Masuk" while the app loads.
     if (response?.status === "error") {
       setError(response.error?.message ?? "Gagal masuk. Coba lagi.");
+      setPending(false);
     }
-    setPending(false);
   };
 
   return (
@@ -83,14 +85,18 @@ export function SignInForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Password</FormLabel>
-                <FormControl>
-                  <div className="relative">
+                {/* FormControl wraps the <input> itself, not the wrapper div:
+                    it forwards the id the <label> points at, and on a div the
+                    label was not associated with the field at all. */}
+                <div className="relative">
+                  <FormControl>
                     <Input
                       type={showPassword ? "text" : "password"}
                       autoComplete="current-password"
                       className="pr-10"
                       {...field}
                     />
+                  </FormControl>
                     <button
                       type="button"
                       onClick={() => setShowPassword((v) => !v)}
@@ -104,8 +110,7 @@ export function SignInForm({
                         <Eye aria-hidden className="size-4" />
                       )}
                     </button>
-                  </div>
-                </FormControl>
+                </div>
                 <FormMessage />
               </FormItem>
             )}

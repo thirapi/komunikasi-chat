@@ -11,7 +11,11 @@ export function proxy(request: NextRequest) {
     )
 
     if (isProtected && !session) {
-        return NextResponse.redirect(new URL('/', request.url))
+        // Remember where the user was going so login can send them back.
+        const loginUrl = new URL('/', request.url)
+        const target = request.nextUrl.pathname + request.nextUrl.search
+        if (target !== '/channels/default') loginUrl.searchParams.set('callbackUrl', target)
+        return NextResponse.redirect(loginUrl)
     }
 
     return NextResponse.next()

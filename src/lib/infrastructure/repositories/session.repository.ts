@@ -3,6 +3,7 @@ import { sessions } from "@/lib/infrastructure/drizzle/schema";
 import { eq, desc } from "drizzle-orm";
 import { ISessionRepository } from "@/lib/application/repositories/session.repository.interface";
 import { SessionLogRecord, SessionRecord } from "@/lib/entities/models/session.model";
+import { UserRecord } from "@/lib/entities/models/user.model";
 
 export class SessionRepository implements ISessionRepository {
   constructor(private client: typeof db) { }
@@ -48,6 +49,31 @@ export class SessionRepository implements ISessionRepository {
       });
       return session as SessionRecord | null;
     } catch (err) {
+      return null;
+    }
+  }
+
+  async findBySessionIdWithUser(
+    sessionId: string
+  ): Promise<{ session: SessionRecord; user: Omit<UserRecord, "password"> } | null> {
+    // One query (session JOIN user) instead of two sequential round-trips on
+    // every authenticated request. The bcrypt hash is excluded: nothing that
+    // consumes a session needs it, and it used to ride along in every
+    // SessionDTO despite the type saying otherwise.
+    try {
+      const row = await this.client.query.sessions.findFirst({
+        where: eq(sessions.id, sessionId),
+        with: {
+          user: {
+            columns: { password: false },
+          },
+        },
+      });
+      if (!row || !row.user) return null;
+      const { user, ...session } = row;
+      return { session: session as SessionRecord, user: user as Omit<UserRecord, "password"> };
+    } catch (err) {
+      console.error("Error finding session:", err);
       return null;
     }
   }

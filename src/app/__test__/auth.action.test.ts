@@ -48,16 +48,27 @@ describe("auth.action", () => {
   });
 
   describe("signUpUser", () => {
-    it("redirects to /signin without callbackUrl", async () => {
+    it("signs the new account in and redirects to /channels/default", async () => {
       vi.mocked(signUpController).mockResolvedValueOnce(undefined as any);
+      vi.mocked(signInController).mockResolvedValueOnce("new_session");
       await signUpUser("testuser", "password123", "password123");
-      expect(redirect).toHaveBeenCalledWith("/signin");
+      expect(signInController).toHaveBeenCalledWith(
+        { username: "testuser", password: "password123" },
+        expect.any(Object)
+      );
+      expect(mockCookieStore.set).toHaveBeenCalledWith(
+        "session_id",
+        "new_session",
+        expect.objectContaining({ httpOnly: true, sameSite: "lax", path: "/" })
+      );
+      expect(redirect).toHaveBeenCalledWith("/channels/default");
     });
 
-    it("redirects to /signin with encoded callbackUrl", async () => {
+    it("redirects to callbackUrl after sign-up", async () => {
       vi.mocked(signUpController).mockResolvedValueOnce(undefined as any);
+      vi.mocked(signInController).mockResolvedValueOnce("new_session");
       await signUpUser("testuser", "password123", "password123", "/dashboard");
-      expect(redirect).toHaveBeenCalledWith("/signin?callbackUrl=%2Fdashboard");
+      expect(redirect).toHaveBeenCalledWith("/dashboard");
     });
 
     it("returns error on AuthenticationError", async () => {
@@ -105,6 +116,24 @@ describe("auth.action", () => {
       vi.mocked(signInController).mockResolvedValueOnce("session_token_123");
       await signInUser("user", "pass", "/custom-path");
       expect(redirect).toHaveBeenCalledWith("/custom-path");
+    });
+
+    it.each(["//evil.com", "/\\evil.com", "https://evil.com"])(
+      "ignores off-site callbackUrl %s",
+      async (url) => {
+        vi.mocked(signInController).mockResolvedValueOnce("session_token_123");
+        await signInUser("user", "pass", url);
+        expect(redirect).toHaveBeenCalledWith("/channels/default");
+      }
+    );
+
+    it("does not redirect on failed credentials", async () => {
+      vi.mocked(signInController).mockRejectedValueOnce(
+        new AuthenticationError("Username atau password salah")
+      );
+      const res = await signInUser("user", "wrong");
+      expect(res.status).toBe("error");
+      expect(redirect).not.toHaveBeenCalled();
     });
 
     it("returns error if signInController returns falsy", async () => {

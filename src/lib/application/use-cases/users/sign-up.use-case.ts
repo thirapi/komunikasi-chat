@@ -15,13 +15,15 @@ export class SignUpUseCase {
 
     async execute(username: string, password: string): Promise<void> {
 
-        const findUser = await this.userRepository.findByUsername(username)
+        // Independent lookups: run them together instead of back to back.
+        const [findUser, userRole] = await Promise.all([
+            this.userRepository.findByUsername(username),
+            this.roleRepository.getRoleByName("user"),
+        ]);
 
         if (findUser) {
-            throw new AuthenticationError("Username already used!")
+            throw new AuthenticationError("Username sudah dipakai")
         }
-
-        const userRole = await this.roleRepository.getRoleByName("user");
 
         if (!userRole) {
             throw new AuthenticationError("Default role 'User' tidak ditemukan");

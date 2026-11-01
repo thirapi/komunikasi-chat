@@ -41,69 +41,90 @@ const getGeolocation = async (ip: string): Promise<Record<string, any> | null> =
   }
 };
 
+const SESSION_COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
+const DEFAULT_AFTER_AUTH = "/channels/default";
+
+/**
+ * Only same-origin paths. "//evil.com" and "/\\evil.com" also start with "/"
+ * but browsers treat them as protocol-relative URLs to another host, which
+ * turned callbackUrl into an open redirect.
+ */
+const safeCallbackUrl = (callbackUrl?: string): string => {
+  if (
+    !callbackUrl ||
+    !callbackUrl.startsWith("/") ||
+    callbackUrl.startsWith("//") ||
+    callbackUrl.startsWith("/\\")
+  ) {
+    return DEFAULT_AFTER_AUTH;
+  }
+  return callbackUrl;
+};
+
+/**
+ * Verify credentials, create the session and set the cookie.
+ *
+ * Geolocation used to be awaited here before the password was even checked,
+ * adding up to 3s (an external HTTP call) to every login. It is now passed as
+ * lazy metadata and resolved inside the deferred audit-log write, after the
+ * response has gone out.
+ */
+const startSession = async (username: string, password: string) => {
+  const context = await getContext();
+  const metadata = async () => {
+    const geo = await getGeolocation(context.ip);
+    return {
+      ...(context.device ? { device: context.device } : {}),
+      ...(geo ? { location: geo } : {}),
+    };
+  };
+
+  const token = await signInController(
+    { username, password },
+    { ip: context.ip, userAgent: context.userAgent, metadata }
+  );
+  if (!token) throw new AuthenticationError("Error creating session!");
+
+  (await cookies()).set("session_id", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_COOKIE_MAX_AGE,
+  });
+};
+
+const toErrorResponse = (err: any): ServerResponse<null> => {
+  if (err instanceof AuthenticationError) {
+    return { status: "error", data: null, error: { message: err.message, type: err.name } };
+  }
+  if (err instanceof InputParsedError) {
+    return {
+      status: "error",
+      data: null,
+      error: { message: err.message, type: err.name, meta: err.fields },
+    };
+  }
+  console.error(err);
+  return {
+    status: "error",
+    data: null,
+    error: { message: "Terjadi kesalahan. Coba lagi.", type: "UNKNOWN_ERROR" },
+  };
+};
+
 export const signInUser = async (
   username: string,
   password: string,
   callbackUrl?: string
 ): Promise<ServerResponse<null>> => {
   try {
-    const COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
-    const context = await getContext();
-    const geo = await getGeolocation(context.ip);
-    const metadata: Record<string, any> = {};
-    if (geo) metadata.location = geo;
-    if (context.device) metadata.device = context.device;
-    const response = await signInController({ username, password }, { ip: context.ip, userAgent: context.userAgent, metadata });
-    const cookieStore = await cookies();
-
-    if (response) {
-      cookieStore.set("session_id", response, {
-        httpOnly: true,
-        maxAge: COOKIE_MAX_AGE,
-      });
-    } else {
-      throw new AuthenticationError("Error creating session!");
-    }
-    
-    if (callbackUrl && callbackUrl.startsWith("/")) {
-      redirect(callbackUrl);
-    } else {
-      redirect("/channels/default");
-    }
-  } catch (err: any) {
-    if (err.message === "NEXT_REDIRECT") throw err;
-    if (err instanceof AuthenticationError) {
-      return {
-        status: "error",
-        data: null,
-        error: {
-          message: err.message,
-          type: err.name,
-        },
-      };
-    }
-
-    if (err instanceof InputParsedError) {
-      return {
-        status: "error",
-        data: null,
-        error: {
-          message: err.message,
-          type: err.name,
-          meta: err.fields,
-        },
-      };
-    }
-    console.log(err);
-    return {
-      status: "error",
-      data: null,
-      error: {
-        message: "Something went wrong",
-        type: "UNKNOWN_ERROR",
-      },
-    };
+    await startSession(username, password);
+  } catch (err) {
+    return toErrorResponse(err);
   }
+  // Outside the try: redirect() works by throwing.
+  redirect(safeCallbackUrl(callbackUrl));
 };
 
 export const signUpUser = async (
@@ -113,50 +134,15 @@ export const signUpUser = async (
   callbackUrl?: string
 ): Promise<ServerResponse<null>> => {
   try {
-    const signUpData: SignUpUserDTO = {
-      username,
-      password,
-      confirm_password,
-    };
+    const signUpData: SignUpUserDTO = { username, password, confirm_password };
     await signUpController(signUpData);
-    const redirectUrl = callbackUrl 
-      ? `/signin?callbackUrl=${encodeURIComponent(callbackUrl)}` 
-      : "/signin";
-    redirect(redirectUrl);
-  } catch (err: any) {
-    if (err.message === "NEXT_REDIRECT") throw err;
-    if (err instanceof AuthenticationError) {
-      return {
-        status: "error",
-        data: null,
-        error: {
-          message: err.message,
-          type: err.name,
-        },
-      };
-    }
-
-    if (err instanceof InputParsedError) {
-      return {
-        status: "error",
-        data: null,
-        error: {
-          message: err.message,
-          type: err.name,
-          meta: err.fields,
-        },
-      };
-    }
-    console.log(err);
-    return {
-      status: "error",
-      data: null,
-      error: {
-        message: "Something went wrong",
-        type: "UNKNOWN_ERROR",
-      },
-    };
+    // Sign the new account straight in instead of sending the user back to
+    // the login form to type the same credentials again.
+    await startSession(username, password);
+  } catch (err) {
+    return toErrorResponse(err);
   }
+  redirect(safeCallbackUrl(callbackUrl));
 };
 
 export const signOutUserAction = async () => {

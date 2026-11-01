@@ -3,7 +3,7 @@ import { InputParsedError } from "@/lib/entities/errors/common";
 import { SignInUserDTO } from "@/lib/entities/models/user.model";
 import { SessionRepository } from "@/lib/infrastructure/repositories/session.repository";
 import { UserRepository } from "@/lib/infrastructure/repositories/user.repository";
-import { AuthenticationService } from "@/lib/infrastructure/services/authentication.service";
+import { AuthenticationService, AuthMetadata } from "@/lib/infrastructure/services/authentication.service";
 import { PasswordService } from "@/lib/infrastructure/services/password.service";
 import { DrizzleActivityLogRepository } from "@/lib/infrastructure/repositories/activity-log.repository";
 import { z } from "zod";
@@ -32,7 +32,7 @@ const formSchema = z.object({
     password: z.string(),
 });
 
-export const signInController = async (userCredential: SignInUserDTO, context?: { ip?: string; userAgent?: string; metadata?: Record<string, any> }) => {
+export const signInController = async (userCredential: SignInUserDTO, context?: { ip?: string; userAgent?: string; metadata?: AuthMetadata }) => {
     const parsedUserCredential = formSchema.safeParse(userCredential);
 
     if (!parsedUserCredential.success) {

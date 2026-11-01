@@ -4,6 +4,7 @@ import { ChatRoomClientWrapper } from "@/app/(with-sidebar)/channels/[roomId]/co
 import { getUserSession } from "@/app/auth.action";
 import { AnimatedUsername } from "@/components/landingpage/animated-username";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 export default async function ChatPage({
   params,
@@ -12,7 +13,16 @@ export default async function ChatPage({
 }) {
   const { roomId } = await params;
   const session = await getUserSession();
-  const username = session?.user?.username || "Pengguna";
+
+  // The proxy only checks that a session cookie exists. An expired or revoked
+  // one used to render the chat shell with no user (empty sidebar, failing
+  // actions); send it back to login and return here afterwards.
+  if (!session?.user) {
+    const target = `/channels/${roomId}`;
+    redirect(roomId === "default" ? "/" : `/?callbackUrl=${encodeURIComponent(target)}`);
+  }
+
+  const username = session.user.username || "Pengguna";
 
   if (roomId === "default") {
     return (
