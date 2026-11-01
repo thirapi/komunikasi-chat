@@ -467,7 +467,9 @@ const getFileName = (url: string) => {
   const getProxiedUrl = (url: string) => {
     if (!url) return "";
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://komunikasi.qzz.io";
-    if (url.startsWith("/") || 
+    const storageUrl = process.env.NEXT_PUBLIC_R2_PUBLIC_DOMAIN_URL;
+    if (url.startsWith("/") ||
+        (storageUrl && url.startsWith(storageUrl)) || 
         url.startsWith(window.location.origin) || 
         url.startsWith(baseUrl) ||
         url.includes("/api/media-proxy")) {
@@ -873,7 +875,13 @@ const getFileName = (url: string) => {
                   dateTime={createdAt.toISOString()}
                   className="shrink-0 text-[11px] tabular-nums text-muted-foreground cursor-default"
                 >
-                  {message.sendError ? formatTimestamp(createdAt) : message.isOptimistic ? "Mengirim…" : formatTimestamp(createdAt)}
+                  {message.sendError
+                    ? formatTimestamp(createdAt)
+                    : message.isOptimistic
+                      ? message.uploadProgress !== undefined && message.uploadProgress < 100
+                        ? `Mengunggah ${message.uploadProgress}%…`
+                        : "Mengirim…"
+                      : formatTimestamp(createdAt)}
                 </time>
               </TooltipTrigger>
               <TooltipContent side="top" className="text-xs py-1 px-2">

@@ -4,13 +4,20 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { DocumentUploadError } from "../../entities/errors/common";
 import {
   FileStorageInterface,
   SavedFileResult,
   SaveFileOptions,
   UploadedFile,
+  CreateUploadUrlOptions,
+  UploadUrlResult,
 } from "@/lib/application/services/file-storage.interface";
+
+/** Upper bound for direct-to-R2 uploads (videos). */
+export const DIRECT_UPLOAD_MAX_BYTES = 50 * 1024 * 1024;
+const UPLOAD_URL_TTL_SECONDS = 5 * 60;
 
 /**
  * Class representing a service for Cloudflare R2 storage operations using AWS S3 SDK.
@@ -65,6 +72,35 @@ export class CloudflareR2Service extends FileStorageInterface {
     const safeExt = ext.replace(/[^a-zA-Z0-9]/g, "");
 
     return safeExt ? `${safeName}.${safeExt}` : safeName;
+  }
+
+  async createUploadUrl({ destination, filename, contentType, size }: CreateUploadUrlOptions): Promise<UploadUrlResult> {
+    if (size <= 0 || size > DIRECT_UPLOAD_MAX_BYTES) {
+      throw new DocumentUploadError(`Ukuran file maksimal ${DIRECT_UPLOAD_MAX_BYTES / (1024 * 1024)} MB`);
+    }
+    const blobName = `${Date.now()}-${this.sanitizeFilename(filename) || "file"}`;
+    const key = `${destination.replace(/\/$/, "")}/${blobName}`;
+
+    // Content-Type and Content-Length are part of the signature, so the
+    // browser can only upload exactly the file that was approved.
+    const command = new PutObjectCommand({
+      Bucket: this.bucketName,
+      Key: key,
+      ContentType: contentType,
+      ContentLength: size,
+    });
+    const uploadUrl = await getSignedUrl(this.client, command, {
+      expiresIn: UPLOAD_URL_TTL_SECONDS,
+      signableHeaders: new Set(["content-type", "content-length"]),
+    });
+
+    return {
+      uploadUrl,
+      headers: { "Content-Type": contentType },
+      fileurl: `${this.publicUrlBase}/${encodeURI(key)}`,
+      filename: blobName,
+      key,
+    };
   }
 
   /**

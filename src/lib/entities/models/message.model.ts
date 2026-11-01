@@ -15,6 +15,8 @@ export interface MessageRecord {
   optimisticId?: string;
   /** Client-only: the optimistic send failed and can be retried. */
   sendError?: boolean;
+  /** Client-only: attachment upload progress (0–100) while sending. */
+  uploadProgress?: number;
 }
 
 export interface MessageWithUserDTO extends MessageRecord {

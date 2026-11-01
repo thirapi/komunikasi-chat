@@ -25,7 +25,7 @@ import { useMarkAsRead } from "./hooks/use-mark-as-read";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePresence } from "@/components/presence-provider";
 import { useUnread } from "@/components/unread-provider";
-import { ArrowDown } from "@phosphor-icons/react/dist/ssr";
+import { ArrowDown, Paperclip } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 import { stripMarkdown } from "@/lib/strip-markdown";
 import { retrySend, clearRetry } from "@/lib/chat/pending-sends";
@@ -104,6 +104,39 @@ export function ChatRoom({
   const unreadRef = useRef<HTMLDivElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLDivElement>(null);
+
+  // Drag-and-drop: files dropped anywhere on the conversation go to the
+  // composer. A depth counter avoids flicker as the drag crosses child nodes.
+  const fileDropRef = useRef<((files: File[]) => void) | null>(null);
+  const dragDepthRef = useRef(0);
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const hasFiles = (e: React.DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
+  const dropHandlers = {
+    onDragEnter: (e: React.DragEvent) => {
+      if (!hasFiles(e) || !fileDropRef.current) return;
+      e.preventDefault();
+      dragDepthRef.current += 1;
+      setIsDraggingFiles(true);
+    },
+    onDragOver: (e: React.DragEvent) => {
+      if (!hasFiles(e) || !fileDropRef.current) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      if (!hasFiles(e)) return;
+      dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+      if (dragDepthRef.current === 0) setIsDraggingFiles(false);
+    },
+    onDrop: (e: React.DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      dragDepthRef.current = 0;
+      setIsDraggingFiles(false);
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length) fileDropRef.current?.(files);
+    },
+  };
 
   // Sync state with props when they change (e.g. after server fetch in wrapper)
   useEffect(() => {
@@ -754,6 +787,16 @@ export function ChatRoom({
     );
   }, []);
 
+  const handleUploadProgress = useCallback((optimisticId: string, pct: number) => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.isOptimistic && m.optimisticId === optimisticId && m.uploadProgress !== pct
+          ? { ...m, uploadProgress: pct }
+          : m,
+      ),
+    );
+  }, []);
+
   const handleRetrySend = useCallback((message: MessageWithUserDTO) => {
     if (!message.optimisticId) return;
     setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, sendError: false } : m)));
@@ -876,7 +919,16 @@ export function ChatRoom({
         onUpdateRoom={handleUpdateRoom}
       />
       <div className="flex flex-1 min-h-0 overflow-hidden">
-        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div className="relative flex flex-col flex-1 min-h-0 overflow-hidden" {...dropHandlers}>
+          {isDraggingFiles && (
+            <div className="pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-xl border-2 border-dashed border-primary/60 bg-background/85 backdrop-blur-[2px] animate-in fade-in duration-100">
+              <div className="text-center">
+                <Paperclip className="mx-auto h-7 w-7 text-primary" />
+                <p className="mt-2 text-sm font-semibold text-foreground">Lepaskan untuk melampirkan</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">Foto, video, atau dokumen · maksimal 5 file, 50 MB per file</p>
+              </div>
+            </div>
+          )}
           <div className="flex-1 min-h-0 overflow-hidden relative">
             <MessageList
               userId={userId}
@@ -929,6 +981,8 @@ export function ChatRoom({
             onNewMessage={handleMessageSend}
             onStartEditLast={handleStartEditLast}
             onSendFailed={handleSendFailed}
+            onUploadProgress={handleUploadProgress}
+            fileDropRef={fileDropRef}
             user={user}
           />
         </div>

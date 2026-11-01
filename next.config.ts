@@ -29,6 +29,11 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  // Our own R2 files are loaded directly by the browser; only third-party
+  // media goes through /api/media-proxy (whose responses Vercel caps ~4.5 MB).
+  env: {
+    NEXT_PUBLIC_R2_PUBLIC_DOMAIN_URL: process.env.R2_PUBLIC_DOMAIN_URL ?? "",
+  },
   // Pin the workspace root explicitly. Without this, Turbopack walks up looking
   // for a lockfile and picks up unrelated projects that happen to sit above this
   // directory, which both warns on every build and makes resolution depend on
