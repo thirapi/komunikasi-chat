@@ -24,37 +24,51 @@
 
 ## Quick start
 
-Needs **Node 20+**, a PostgreSQL database, and a Pusher app.
+Needs **Node 20+**, a PostgreSQL database, a Pusher app, an Upstash Redis
+database and a Cloudflare R2 bucket.
 
 ```console
 $ git clone https://github.com/thirapi/komunikasi-chat.git
 $ cd komunikasi-chat
 $ npm install
-$ cp .env.example .env          # 20 variables, each documented
-$ npm run db:push               # apply schema
+$ cp .env.example .env          # 19 variables, each documented
+$ npm run db:migrate            # apply migrations in drizzle/
 $ npm run db:seed               # optional: dev users
 $ npm run dev
 ```
 
 <http://localhost:3000>
 
-Only `DATABASE_URL`, `PUSHER_*` and `R2_*` are needed to boot. Everything else
-degrades gracefully — no push keys means no notifications, not a broken app.
+Only `DATABASE_URL`, `PUSHER_*`, `R2_*` and `UPSTASH_REDIS_*` (presence,
+session throttling) are needed to boot. Everything else degrades gracefully: no
+push keys means no notifications, not a broken app.
+
+Migrations are not run on deploy. After pulling a change that adds one to
+`drizzle/`, run `npm run db:migrate` against the database yourself.
 
 ---
 
 ## What's inside
 
 **Messaging**
-: Channels and DMs, replies, threads, attachments, reactions, read receipts,
-  typing indicators. Lexical rich text with `@mention` tokens, optimistic UI
-  reconciled against the server, and an IndexedDB cache so a room paints from
-  cache before the network answers.
+: Channels and DMs, replies, attachments (uploaded straight to R2, up to 50 MB),
+  reactions, edits and deletions. Lexical rich text with `@mention` tokens;
+  code pasted from an editor or a web page becomes a fenced code block with its
+  language. Sends are optimistic, with retry and discard when they fail.
+
+**Feels like WhatsApp/Telegram**
+: Rooms switch on the client and paint from an in-memory + IndexedDB cache on
+  the first frame, then catch up with a **delta sync** (only what changed since
+  the last sync, edits and deletions included). The chat list shows unread
+  counts, mention badges, live previews and "sedang mengetik…"; DMs show ✓ / ✓✓
+  read receipts; an "@" button jumps to unread mentions. The view stays pinned
+  to the newest message, and on phones you swipe a message to reply and
+  long-press for its actions.
 
 **Realtime**
-: Pusher carries messages, reactions, deletions and typing. Presence is
-  WebSocket-backed through a Redis index, so it survives multiple tabs and
-  devices.
+: Pusher private channels (authorised per room membership) carry messages,
+  reactions, deletions, read state and typing. Presence is WebSocket-backed
+  through a Redis index, so it survives multiple tabs and devices.
 
 **Push**
 : Web Push for browsers, Firebase Cloud Messaging for the app. Both stored, both
@@ -126,7 +140,7 @@ documents are standards the code is expected to follow — not post-mortems.
 The Android app is a Capacitor shell around the deployed web app.
 
 > **Why it loads a URL instead of a bundle.** A static export is not possible
-> here. The app exposes 53 Server Actions across 12 `"use server"` modules, and
+> here. The app exposes 50+ Server Actions across 12 `"use server"` modules, and
 > Server Actions only execute against a live Next.js server — a static export
 > would strip the entire data layer. Loading the deployment keeps the backend
 > untouched and every action working.
@@ -135,7 +149,8 @@ What the shell adds that a browser tab cannot:
 
 - Hardware **back** navigates the stack instead of leaving the app
 - Status bar follows the theme, and stays opaque
-- Body resizes for the keyboard, so the input is never covered
+- Body resizes for the keyboard, so the input is never covered (the web app
+  does the same in mobile browsers via `interactive-widget` and `visualViewport`)
 - Native launch screen
 - Haptics on message sent and received
 
@@ -192,15 +207,17 @@ growing and sends stop retrying them. Transient failures keep the token.
 
 ```console
 $ npm test
- ✓ 8 files · 59 tests
+ ✓ 18 files · 177 tests
 
-$ npm run lint
 $ npx tsc --noEmit
 ```
 
-Covers use cases against mocked repositories, password hashing including
-backwards compatibility of hashes written by the previous implementation,
-the presence index and its stale-entry pruning, and push transport routing.
+Covers server actions (session identity and room access on every one), use
+cases against mocked repositories (delta sync, read state and receipts, typing
+fan-out, unread counts), the code-paste heuristics, markdown sanitising, touch
+gestures, password hashing including backwards compatibility of hashes written
+by the previous implementation, the presence index and its stale-entry pruning,
+and push transport routing.
 
 The sidebar projection is checked against a **real Postgres**, not a mock:
 
@@ -304,8 +321,11 @@ scripts/    build, measurement, maintenance
 |:--|:--|
 | `dev` `build` `start` | Next.js |
 | `lint` `test` | ESLint, Vitest |
-| `db:push` `db:generate` `db:seed` `db:reset` `db:studio` | schema and data |
+| `db:migrate` | apply the migrations in `drizzle/` (not run on deploy) |
+| `db:push` `db:seed` `db:reset` `db:studio` | dev schema sync and data |
+| `npx drizzle-kit generate` | new migration after editing `schema.ts` |
 | `cap:sync` `cap:open:android` `cap:run:android` `cap:open:ios` | native |
+| `android:keystore` `android:signing-config` `android:release` | release builds |
 | `measure:*` `verify:*` `bench:*` | performance and correctness |
 
 </details>
@@ -315,18 +335,24 @@ scripts/    build, measurement, maintenance
 
 | Document | Covers |
 |:--|:--|
-| [mark-as-read](docs/mark-as-read.md) | Throttled read state, multi-device sync |
-| [column-reverse-architecture](docs/column-reverse-architecture.md) | CSS-only chat anchoring, no JS scroll math |
-| [indexeddb-sync](docs/indexeddb-sync.md) | Local-first message cache |
+| [mark-as-read](docs/mark-as-read.md) | Read state, unread counts, mentions, DM receipts, multi-device sync |
+| [column-reverse-architecture](docs/column-reverse-architecture.md) | CSS chat anchoring, plus the small stick-to-bottom exception |
+| [indexeddb-sync](docs/indexeddb-sync.md) | Local-first message cache and delta sync |
 | [lexical-editor](docs/lexical-editor.md) | Editor architecture, mention nodes |
 | [native-app](docs/native-app.md) | Capacitor shell, push setup |
-| [optimistic-ui-flow](docs/optimistic-ui-flow.md) | Optimistic updates and reconciliation |
+| [optimistic-ui-flow](docs/optimistic-ui-flow.md) | Optimistic sends and reconciliation |
 | [custom-emojis](docs/custom-emojis.md) | Shortcodes, R2-hosted emoji |
-| [account-filtering](docs/account-filtering.md) | Mute, intensity reduction |
-| [fediverse-implementation](docs/fediverse-implementation.md) | ActivityPub |
-| [federation-whitelist-strategy](docs/federation-whitelist-strategy.md) | Inbox filtering vs outbound fetch |
-| [post-actions](docs/post-actions.md) | Like, repost, quote, bookmark |
 | [ui-design-standards](docs/ui-design-standards.md) | Visual conventions |
+
+The microblog / Fediverse feature these documents describe is not part of the
+current app; they are kept for reference:
+[fediverse-implementation](docs/fediverse-implementation.md),
+[federation-whitelist-strategy](docs/federation-whitelist-strategy.md),
+[social-post-flow](docs/social-post-flow.md),
+[post-actions](docs/post-actions.md),
+[post-item-navigation](docs/post-item-navigation.md),
+[optimistic-ui-persistence](docs/optimistic-ui-persistence.md),
+[account-filtering](docs/account-filtering.md).
 
 </details>
 
