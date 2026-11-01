@@ -18,6 +18,15 @@ export function isPlainLeftClick(e: React.MouseEvent) {
   return e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
 }
 
+/** Set while <RoomHost> is mounted (i.e. the user is somewhere under /channels). */
+let roomHostMounted = false;
+
+export function setRoomHostMounted(mounted: boolean) {
+  roomHostMounted = mounted;
+}
+
+type RouterLike = { push: (href: string) => void };
+
 /**
  * Switch chats without a server round-trip.
  *
@@ -25,9 +34,17 @@ export function isPlainLeftClick(e: React.MouseEvent) {
  * on the same frame and back/forward keep working, but no RSC payload is
  * requested. The room itself is rendered by <RoomHost> from the client cache,
  * so the switch is a single client render — the way Telegram Web feels.
+ *
+ * That only works while <RoomHost> (the /channels layout) is on screen. From
+ * other pages (profile, settings) a pushState would change the URL but leave
+ * the old page rendered, so those go through the router instead.
  */
-export function navigateToRoom(url: string) {
+export function navigateToRoom(url: string, router: RouterLike) {
   if (typeof window === "undefined") return;
+  if (!roomHostMounted) {
+    router.push(url);
+    return;
+  }
   if (window.location.pathname + window.location.search === url) return;
   window.history.pushState(null, "", url);
 }

@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { RoomWithParticipantsDTO } from "@/lib/entities/models/room.model";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useConnectionStatus } from "@/hooks/use-connection-status";
 import { Shortcut } from "@/components/ui/kbd";
@@ -45,6 +46,7 @@ export function ChatHeader({
   onlineUserIds,
   onUpdateRoom,
 }: ChatHeaderProps) {
+  const router = useRouter();
   const [showDetails, setShowDetails] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
@@ -95,7 +97,7 @@ export function ChatHeader({
                 onClick={(e) => {
                   if (isPlainLeftClick(e)) {
                     e.preventDefault();
-                    navigateToRoom("/channels/default");
+                    navigateToRoom("/channels/default", router);
                   }
                 }}
               >
