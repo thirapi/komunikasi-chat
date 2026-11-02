@@ -25,7 +25,7 @@ interface Props {
 export function RealtimeNotificationListener({ user }: Props) {
   const pathname = usePathname();
   const router = useRouter();
-  const { markAsUnread, markAsRead, recordActivity, clearActivity, unreadRooms, setRoomTyping } = useUnread();
+  const { markAsUnread, markAsRead, recordActivity, clearActivity, unreadRooms, setRoomTyping, isMuted, setMuted } = useUnread();
   // Rooms the sidebar already knows about; a message from any other room means
   // someone started a DM / added us to a channel, so the sidebar must reload.
   const knownRoomsRef = useRef(unreadRooms);
@@ -108,9 +108,11 @@ export function RealtimeNotificationListener({ user }: Props) {
         return;
       }
 
+      markAsUnread(roomId, mentionsMe);
+      // Muted: counted as unread, but silent, unless it mentions the user.
+      if (isMuted(roomId) && !mentionsMe) return;
       playNotificationSound();
       hapticLight();
-      markAsUnread(roomId, mentionsMe);
 
       toast.custom((t) => (
         <button
@@ -164,6 +166,11 @@ export function RealtimeNotificationListener({ user }: Props) {
       },
     );
 
+    // CHAT: mute changed on another tab/device.
+    channel.bind("room-mute-changed", (data: { roomId: string; mutedUntil: string | null }) => {
+      if (data?.roomId) setMuted(data.roomId, data.mutedUntil);
+    });
+
     // CHAT: Message Deleted
     channel.bind("message-deleted-notification", (data: { roomId?: string }) => {
       // The open room removes the message itself (chat-room.tsx). Here only
@@ -183,7 +190,7 @@ export function RealtimeNotificationListener({ user }: Props) {
       channel.unbind_all();
       getPusher().unsubscribe(userChannel(user.id));
     };
-  }, [user.id, user.username, markAsUnread, markAsRead, recordActivity, clearActivity, setRoomTyping, router]);
+  }, [user.id, user.username, markAsUnread, markAsRead, recordActivity, clearActivity, setRoomTyping, isMuted, setMuted, router]);
 
   return null;
 }

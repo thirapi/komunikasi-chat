@@ -8,6 +8,9 @@ export interface MessageRecord {
   roomId: string;
   replyTo?: string | null;
   isDeleted: boolean;
+  pinnedAt?: Date | null;
+  editedAt?: Date | null;
+  pinnedBy?: string | null;
   createdAt: Date;
   updatedAt: Date;
   attachments?: AttachmentRecord[];
@@ -37,4 +40,16 @@ export interface MessageWithUserDTO extends MessageRecord {
     };
   } | null;
   reactions?: MessageReactionWithUserDTO[];
+}
+
+/** A pinned message as the room's pin banner needs it. */
+export interface PinnedMessageDTO {
+  id: string;
+  content: string;
+  userId: string;
+  user: { username: string; name: string | null };
+  createdAt: Date;
+  pinnedAt: Date;
+  /** File type of the first attachment, for "📷 Foto"-style previews. */
+  attachmentType: string | null;
 }

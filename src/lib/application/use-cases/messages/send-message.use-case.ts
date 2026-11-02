@@ -121,10 +121,20 @@ export class SendMessageUseCase {
     let allSubscriptions: Awaited<
       ReturnType<typeof this.pushSubscriptionRepository.getSubscriptionsByUserIds>
     > = [];
+    // Muted rooms get no push, except for messages that mention the
+    // receiver (or @everyone), like WhatsApp, Telegram and Teams. The realtime
+    // notification above still goes out so unread counts stay right.
+    const now = Date.now();
+    const mentionsEveryone = content.includes("<@everyone>");
+    const pushReceiverIds = participants
+      .filter((p) => {
+        const muted = p.mutedUntil ? new Date(p.mutedUntil).getTime() > now : false;
+        return !muted || mentionsEveryone || content.includes(`<@${p.userId}>`);
+      })
+      .map((p) => p.userId);
+
     try {
-      allSubscriptions = await this.pushSubscriptionRepository.getSubscriptionsByUserIds(
-        receiverIds
-      );
+      allSubscriptions = await this.pushSubscriptionRepository.getSubscriptionsByUserIds(pushReceiverIds);
     } catch (err) {
       console.error("[send-message] Failed to load push subscriptions:", err);
     }

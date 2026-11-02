@@ -331,4 +331,36 @@ describe("SendMessageUseCase", () => {
       await expect(useCase.execute("user1", "Hello", "room1", undefined, undefined, "opt-1")).resolves.toEqual({ ...mockMessage, optimisticId: "opt-1" })
     })
   })
+
+  describe("muted rooms", () => {
+    const future = new Date(Date.now() + 60 * 60 * 1000)
+    const past = new Date(Date.now() - 1000)
+
+    const run = async (content: string) => {
+      vi.mocked(mockRepo.createMessage).mockResolvedValue({ ...baseMessage, content, user: { username: "user1" } } as any)
+      vi.mocked(mockRoomRepo.getOtherParticipants).mockResolvedValue([
+        { userId: "muted", mutedUntil: future },
+        { userId: "expired", mutedUntil: past },
+        { userId: "normal", mutedUntil: null },
+      ] as any)
+      await createUseCase().execute("user1", content, "room1")
+    }
+
+    it("skips push for receivers who muted the room", async () => {
+      await run("halo semua")
+      expect(mockPushRepo.getSubscriptionsByUserIds).toHaveBeenCalledWith(["expired", "normal"])
+      // The realtime notification still reaches everyone, for unread counts.
+      expect(mockPusher.triggerToUsers).toHaveBeenCalledWith(["muted", "expired", "normal"], "new-message-notification", expect.anything())
+    })
+
+    it("still pushes a mention to a muted receiver", async () => {
+      await run("<@muted> cek ini")
+      expect(mockPushRepo.getSubscriptionsByUserIds).toHaveBeenCalledWith(["muted", "expired", "normal"])
+    })
+
+    it("still pushes @everyone to a muted receiver", async () => {
+      await run("<@everyone> rapat jam 3")
+      expect(mockPushRepo.getSubscriptionsByUserIds).toHaveBeenCalledWith(["muted", "expired", "normal"])
+    })
+  })
 })

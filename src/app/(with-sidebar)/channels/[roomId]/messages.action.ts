@@ -16,6 +16,7 @@ const UPLOAD_FOLDERS = new Set(["avatars", "banners", "room-avatars", "room-bann
 import { ServerResponse } from "@/lib/entities/models/response.model";
 import { getMessageController } from "@/lib/interface-adapters/controllers/messages/get-message.controller";
 import { syncRoomMessagesController } from "@/lib/interface-adapters/controllers/messages/sync-room-messages.controller";
+import { togglePinController } from "@/lib/interface-adapters/controllers/messages/toggle-pin.controller";
 import { sendMessageController } from "@/lib/interface-adapters/controllers/messages/send-message.controller";
 import {
   startTypingController,
@@ -256,6 +257,21 @@ export const syncRoomMessages = async (roomId: string, since?: Date | string | n
       data: null,
       error: { message: err.message || "Terjadi kesalahan internal", type: err.name },
     };
+  }
+};
+
+/** Pin or unpin a message (DM: both people; channel: owner or admin). */
+export const togglePinAction = async (messageId: string) => {
+  try {
+    const actorId = await requireWriter();
+    await assertMessageRoomMember(messageId, actorId);
+    const { adminGuard } = await import("@/lib/middlewares/role-guard.middleware");
+    const isAdmin = await adminGuard().catch(() => false);
+    const result = await togglePinController(actorId, messageId, isAdmin);
+    return { status: "success" as const, data: result, error: null };
+  } catch (err: any) {
+    console.error("Action Error:", err);
+    return { status: "error" as const, data: null, error: { message: err.message || "Gagal menyematkan pesan", type: err.name } };
   }
 };
 

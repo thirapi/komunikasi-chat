@@ -36,6 +36,10 @@ vi.mock("@/lib/db", () => ({ db: {} }));
 vi.mock("@/lib/interface-adapters/controllers/rooms/get-sidebar-data.controller", () => ({ getSidebarDataController: vi.fn() }));
 vi.mock("@/lib/interface-adapters/controllers/rooms/get-room-by-id.controller", () => ({ getRoomByIdController: vi.fn() }));
 vi.mock("@/lib/interface-adapters/controllers/messages/sync-room-messages.controller", () => ({ syncRoomMessagesController: vi.fn() }));
+vi.mock("@/lib/interface-adapters/controllers/messages/toggle-pin.controller", () => ({
+  getPinnedMessagesController: vi.fn().mockResolvedValue([]),
+  togglePinController: vi.fn(),
+}));
 vi.mock("@/lib/interface-adapters/controllers/rooms/get-last-read-at.controller", () => ({ getLastReadAtController: vi.fn() }));
 vi.mock("@/lib/interface-adapters/controllers/rooms/get-room-by-user-id.controller", () => ({ getRoomByUserIdController: vi.fn() }));
 vi.mock("@/lib/interface-adapters/controllers/rooms/start-direct-message.controller", () => ({ startDirectMessageController: vi.fn() }));
@@ -88,7 +92,7 @@ describe("room.action", () => {
       vi.mocked(getLastReadAtController).mockResolvedValueOnce(lastRead);
 
       const res = await getRoomSnapshot("r1");
-      expect(res).toEqual({ status: "success", data: { room, lastRead, sync }, error: null });
+      expect(res).toEqual({ status: "success", data: { room, lastRead, sync, pins: [] }, error: null });
       expect(syncRoomMessagesController).toHaveBeenCalledWith("r1", null);
       // Read position is always the session user's, never a client-supplied id.
       expect(getLastReadAtController).toHaveBeenCalledWith(authState.sessionUserId, "r1");

@@ -50,6 +50,15 @@ export const messages = pgTable("Message", {
     roomId: text("roomId").notNull(),
     replyTo: text("replyTo"),
     isDeleted: boolean("isDeleted").default(false).notNull(),
+    /** Pinned to the top of its room (at most a handful per room). */
+    pinnedAt: timestamp("pinnedAt"),
+    pinnedBy: text("pinnedBy"),
+    /**
+     * When the content was last edited. Separate from updatedAt, which also
+     * moves for reactions and pins (delta sync relies on that), so those no
+     * longer show a message as "(diedit)".
+     */
+    editedAt: timestamp("editedAt"),
 }, (t) => [
     // Every per-room read is "messages of room X by time": the newest page,
     // paging back, the sidebar's latest message / unread count, and delta
@@ -57,6 +66,20 @@ export const messages = pgTable("Message", {
     index("Message_roomId_createdAt_idx").on(t.roomId, t.createdAt),
     index("Message_roomId_updatedAt_idx").on(t.roomId, t.updatedAt),
 ]);
+
+/**
+ * Cached link previews, shared by everyone (keyed by the normalised URL).
+ * status "ok" carries the fields; "none" means the page had nothing to show.
+ */
+export const linkPreviews = pgTable("LinkPreview", {
+    url: text("url").primaryKey(),
+    status: text("status").notNull(),
+    title: text("title"),
+    description: text("description"),
+    image: text("image"),
+    siteName: text("siteName"),
+    fetchedAt: timestamp("fetchedAt").defaultNow().notNull(),
+});
 
 export const messagesRelations = relations(messages, ({ one, many }) => ({
     user: one(users, { fields: [messages.userId], references: [users.id] }),
@@ -95,6 +118,8 @@ export const roomParticipants = pgTable("RoomParticipant", {
     userId: text("userId").notNull(),
     lastReadAt: timestamp("lastReadAt"),
     lastReadMessageId: text("lastReadMessageId").references(() => messages.id),
+    /** Notifications for this room are muted until then (far future = forever). */
+    mutedUntil: timestamp("mutedUntil"),
     joinedAt: timestamp("joinedAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
 }, (t) => ({

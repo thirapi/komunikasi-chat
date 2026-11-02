@@ -29,6 +29,8 @@ export function MessageList({
   lastReadAt,
   unreadSettled = true,
   peerReadAt = null,
+  pinnedIds,
+  onTogglePin,
   userId,
   onLoadMore,
   hasMore,
@@ -59,6 +61,9 @@ export function MessageList({
   unreadSettled?: boolean;
   /** DM only: how far the other person has read, for ✓ / ✓✓ on own messages. */
   peerReadAt?: Date | null;
+  pinnedIds?: Set<string>;
+  /** Present when this user may pin in this room. */
+  onTogglePin?: (messageId: string) => void;
   userId: string;
   onLoadMore: () => void;
   hasMore: boolean;
@@ -240,6 +245,8 @@ export function MessageList({
           onRetrySend={onRetrySend}
           onDiscardSend={onDiscardSend}
           roomData={roomData}
+          isPinned={pinnedIds?.has(msg.id) ?? false}
+          onTogglePin={onTogglePin}
           receipt={
             roomData.isDirect && msg.userId === userId && !msg.isOptimistic && !msg.sendError
               ? peerReadTime >= msgTime ? "read" : "sent"

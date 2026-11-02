@@ -11,6 +11,24 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+#### Mute, pinned messages and link previews
+
+Design choices take the middle ground between WhatsApp, Telegram and Teams.
+
+- **Mute a chat** for 1 hour, 8 hours, 1 week or until turned back on (bell in
+  the room header). Muted rooms get no push, sound, toast or browser
+  notification, keep a grey unread count and are left out of the tab title,
+  but a mention of you or `@everyone` still notifies. Synced across devices.
+- **Pin messages**: up to 5 per room, a sixth replaces the oldest. Either
+  person in a DM, the owner or an admin in a channel. A banner under the
+  header shows the pins; clicking jumps to one and moves to the next.
+- **Link previews** for the first link in a message (YouTube and X keep their
+  embeds): title, description, site and image. Fetched once on the server
+  with the media proxy's SSRF protections (public IPs only on every hop,
+  HTML only, 512 KB, 5 s, 3 redirects) and cached for everyone in
+  `LinkPreview` (7 days, 1 day for pages with nothing to show); the image is
+  shown through the media proxy. Links inside code are not previewed.
+
 #### Typing in the chat list
 
 "sedang mengetik…" (or "Budi sedang mengetik…" in a channel) replaces the
@@ -97,6 +115,13 @@ sidebar, search and dialogs were restyled consistently with live previews and
 simpler unread/mention indicators.
 
 ### Fixed
+
+#### Reactions marked messages as edited
+
+"(diedit)" was derived from `updatedAt`, which delta sync also bumps for
+reactions, so a message someone reacted to showed as edited. Edits now set a
+dedicated `editedAt`; migration `0028` backfills it from `updatedAt` for older
+messages, skipping those whose `updatedAt` matches a reaction.
 
 #### Deleted messages kept their files
 

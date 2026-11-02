@@ -123,12 +123,13 @@ const MARKDOWN_CODE_COMPONENTS = {
     );
   },
 };
-import { ArrowBendUpLeft, File, DownloadSimple, Trash, Copy, PencilSimple, Check, Checks, WarningCircle } from "@phosphor-icons/react/dist/ssr";
+import { ArrowBendUpLeft, File, DownloadSimple, Trash, Copy, PencilSimple, Check, Checks, WarningCircle, PushPin, PushPinSlash } from "@phosphor-icons/react/dist/ssr";
 import { Button } from "@/components/ui/button";
 import { useState, useMemo, useEffect, useRef, useCallback, memo } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { hapticLight, hapticMedium } from "@/lib/native/haptics";
 import { useMessageGestures } from "./hooks/use-message-gestures";
+import { LinkPreviewCard } from "./link-preview-card";
 import {
   Tooltip,
   TooltipContent,
@@ -209,6 +210,8 @@ export function MessageItemComponent({
   onDiscardSend,
   roomData,
   receipt,
+  isPinned = false,
+  onTogglePin,
 }: {
   message: MessageWithUserDTO;
   onlineUserIds: string[];
@@ -228,6 +231,9 @@ export function MessageItemComponent({
   roomData?: RoomWithParticipantsDTO;
   /** DM only, own sent messages: delivered to the server, or read by the other person. */
   receipt?: "sent" | "read";
+  isPinned?: boolean;
+  /** Present when the viewer may pin in this room. */
+  onTogglePin?: (messageId: string) => void;
 }) {
   const router = useRouter();
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -286,14 +292,9 @@ export function MessageItemComponent({
     }
   };
 
-  // Detect if message was edited
-  const isEdited = useMemo(() => {
-    if (!message.updatedAt || !message.createdAt) return false;
-    const created = new Date(message.createdAt).getTime();
-    const updated = new Date(message.updatedAt).getTime();
-    // Allow 1 second tolerance for DB write delay
-    return updated - created > 1000;
-  }, [message.createdAt, message.updatedAt]);
+  // Edited = editedAt is set. updatedAt is not a signal any more: reactions
+  // and pins move it too (delta sync), which made those show "(diedit)".
+  const isEdited = !!message.editedAt;
 
   const formatEditedTime = (date: Date) => {
     return new Date(date).toLocaleString("id-ID", {
@@ -505,7 +506,8 @@ const getFileName = (url: string) => {
   const socialEmbeds = useMemo(() => {
     if (!message.content) return [];
 
-    const urls = extractUrls(message.content);
+    // Links inside code are code, not something to preview.
+    const urls = extractUrls(message.content.replace(/```[\s\S]*?```/g, " ").replace(/`[^`\n]*`/g, " "));
 
     const embeds: React.ReactNode[] = [];
     
@@ -519,6 +521,8 @@ const getFileName = (url: string) => {
         const xMatch = url.match(X_REGEX);
         if (xMatch) {
           embeds.push(<XEmbed key={url} tweetUrl={url} />);
+        } else {
+          embeds.push(<LinkPreviewCard key={url} url={url} />);
         }
       }
 
@@ -898,7 +902,7 @@ const getFileName = (url: string) => {
         )}
       </div>
 
-      <div className={cn("flex-1 min-w-0", receipt && "pr-5")}>
+      <div className={cn("flex-1 min-w-0", (receipt || isPinned) && "pr-5")}>
         {showHeader && (
           <div className="flex items-baseline gap-2 min-w-0">
             <ProfileHoverCard
@@ -988,7 +992,7 @@ const getFileName = (url: string) => {
                     </span>
                   </TooltipTrigger>
                   <TooltipContent side="top" className="text-xs py-1 px-2">
-                    Diedit {formatEditedTime(new Date(message.updatedAt))}
+                    Diedit {formatEditedTime(new Date(message.editedAt ?? message.updatedAt))}
                   </TooltipContent>
                 </Tooltip>
               )}
@@ -1162,6 +1166,12 @@ const getFileName = (url: string) => {
           </div>
         )}
 
+        {isPinned && (
+          <span className="absolute top-1 right-2 sm:right-3 text-primary/80" title="Disematkan" aria-label="Disematkan">
+            <PushPin weight="fill" className="h-3 w-3" />
+          </span>
+        )}
+
         {receipt && (
           <span
             className={cn(
@@ -1240,6 +1250,22 @@ const getFileName = (url: string) => {
                     </button>
                   </TooltipTrigger>
                   <TooltipContent side="top" className="text-xs py-1 px-2">Salin teks</TooltipContent>
+                </Tooltip>
+              )}
+
+              {onTogglePin && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => onTogglePin(message.id)}
+                      className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      aria-label={isPinned ? "Lepas sematan" : "Sematkan"}
+                    >
+                      {isPinned ? <PushPinSlash className="w-4 h-4" /> : <PushPin className="w-4 h-4" />}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs py-1 px-2">{isPinned ? "Lepas sematan" : "Sematkan"}</TooltipContent>
                 </Tooltip>
               )}
 

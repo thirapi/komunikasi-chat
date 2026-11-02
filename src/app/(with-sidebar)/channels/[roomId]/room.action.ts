@@ -13,7 +13,10 @@ import { createRoomController } from "@/lib/interface-adapters/controllers/rooms
 import { getRoomByIdController } from "@/lib/interface-adapters/controllers/rooms/get-room-by-id.controller";
 import { syncRoomMessagesController } from "@/lib/interface-adapters/controllers/messages/sync-room-messages.controller";
 import type { RoomSync } from "@/lib/application/use-cases/messages/sync-room-messages.use-case";
+import { getPinnedMessagesController } from "@/lib/interface-adapters/controllers/messages/toggle-pin.controller";
+import type { PinnedMessageDTO } from "@/lib/entities/models/message.model";
 import { getLastReadAtController } from "@/lib/interface-adapters/controllers/rooms/get-last-read-at.controller";
+import { setRoomMuteController } from "@/lib/interface-adapters/controllers/rooms/set-room-mute.controller";
 import { getRoomByUserIdController } from "@/lib/interface-adapters/controllers/rooms/get-room-by-user-id.controller";
 import { getSidebarDataController } from "@/lib/interface-adapters/controllers/rooms/get-sidebar-data.controller";
 import { SidebarRoomDTO } from "@/lib/entities/models/room.model";
@@ -95,20 +98,22 @@ export const getRoomSnapshot = async (
     room: RoomWithParticipantsDTO;
     lastRead: { id: string | null; at: Date | null };
     sync: RoomSync;
+    pins: PinnedMessageDTO[];
   } | null>
 > => {
   try {
     const viewerId = await requireReader();
     await assertCanReadRoom(roomId, viewerId);
-    const [room, sync, lastRead] = await Promise.all([
+    const [room, sync, lastRead, pins] = await Promise.all([
       getRoomByIdController(roomId),
       syncRoomMessagesController(roomId, since ? new Date(since) : null),
       getLastReadAtController(viewerId, roomId),
+      getPinnedMessagesController(roomId),
     ]);
     if (!room) {
       return { status: "error", data: null, error: { message: "Room tidak ditemukan", type: "NotFound" } };
     }
-    return { status: "success", data: { room, lastRead, sync }, error: null };
+    return { status: "success", data: { room, lastRead, sync, pins }, error: null };
   } catch (err: any) {
     console.error("Action Error:", err);
     return {
@@ -116,6 +121,22 @@ export const getRoomSnapshot = async (
       data: null,
       error: { message: err.message, type: err.name, meta: err.fields },
     };
+  }
+};
+
+/** Mute (or unmute with "off") a room's notifications for the signed-in user. */
+export const setRoomMuteAction = async (
+  roomId: string,
+  duration: "1h" | "8h" | "1w" | "forever" | "off"
+): Promise<ServerResponse<{ mutedUntil: Date | null } | null>> => {
+  try {
+    const actorId = await requireWriter();
+    await assertRoomMember(roomId, actorId);
+    const mutedUntil = await setRoomMuteController(actorId, roomId, duration);
+    return { status: "success", data: { mutedUntil }, error: null };
+  } catch (err: any) {
+    console.error("Action Error:", err);
+    return { status: "error", data: null, error: { message: err.message, type: err.name } };
   }
 };
 

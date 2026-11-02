@@ -1,9 +1,10 @@
 import { db } from "@/lib/db";
 import { messages, attachments as attachmentsTable, roomParticipants } from "@/lib/infrastructure/drizzle/schema";
-import { eq, ne, asc, desc, lt, gt, and, ilike, or, like, inArray } from "drizzle-orm";
+import { eq, ne, asc, desc, lt, gt, and, ilike, or, like, inArray, isNotNull } from "drizzle-orm";
 import { IMessageRepository } from "@/lib/application/repositories/message.repository.interface";
 import {
   MessageWithUserDTO,
+  PinnedMessageDTO,
 } from "@/lib/entities/models/message.model";
 import { AttachmentWithMessageDTO } from "@/lib/entities/models/attachment.model";
 import { createId } from "@paralleldrive/cuid2";
@@ -130,6 +131,36 @@ export class MessageRepository implements IMessageRepository {
     return rows.map((r) => r.url);
   }
 
+  async getPinnedMessages(roomId: string, limit: number): Promise<PinnedMessageDTO[]> {
+    const rows = await this.client.query.messages.findMany({
+      where: and(eq(messages.roomId, roomId), isNotNull(messages.pinnedAt), eq(messages.isDeleted, false)),
+      orderBy: [desc(messages.pinnedAt)],
+      limit,
+      columns: { id: true, content: true, userId: true, createdAt: true, pinnedAt: true },
+      with: {
+        user: { columns: { username: true, name: true } },
+        attachments: { columns: { fileType: true }, limit: 1 },
+      },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      // The banner shows one line; no need to ship long messages around.
+      content: r.content.length > 300 ? `${r.content.slice(0, 300)}…` : r.content,
+      userId: r.userId,
+      user: { username: r.user?.username ?? "", name: r.user?.name ?? null },
+      createdAt: r.createdAt,
+      pinnedAt: r.pinnedAt as Date,
+      attachmentType: r.attachments?.[0]?.fileType ?? null,
+    }));
+  }
+
+  async setPinned(messageId: string, pinnedBy: string | null): Promise<void> {
+    await this.client
+      .update(messages)
+      .set({ pinnedAt: pinnedBy ? new Date() : null, pinnedBy, updatedAt: new Date() })
+      .where(eq(messages.id, messageId));
+  }
+
   async touchMessage(messageId: string): Promise<void> {
     await this.client.update(messages).set({ updatedAt: new Date() }).where(eq(messages.id, messageId));
   }
@@ -243,6 +274,7 @@ export class MessageRepository implements IMessageRepository {
       .update(messages)
       .set({
         content,
+        editedAt: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(messages.id, messageId))

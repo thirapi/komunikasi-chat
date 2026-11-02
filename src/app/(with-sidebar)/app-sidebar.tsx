@@ -11,6 +11,7 @@ import {
   GearSix,
   SignOut,
   SealCheck,
+  BellSlash,
 } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
@@ -142,7 +143,7 @@ export function AppSidebar({
   const searchParams = useSearchParams();
   const isMobileFromHook = useIsMobile();
   const { setOpenMobile } = useSidebar();
-  const { unreadRooms, roomActivity, roomTyping, initializeUnread } = useUnread();
+  const { unreadRooms, roomActivity, roomTyping, mutedRooms, initializeUnread } = useUnread();
   const { onlineUserIds } = usePresence();
   const customEmojis = useCustomEmojis();
 
@@ -222,6 +223,7 @@ export function AppSidebar({
         hasUnread: r.hasUnread,
         hasMention: (r as any).hasMention,
         unreadCount: r.unreadCount,
+        mutedUntil: r.mutedUntil,
         lastMessageTime: r.lastMessageTime,
       }))
     );
@@ -593,6 +595,9 @@ export function AppSidebar({
                             <Hash className="size-3.5 shrink-0 text-muted-foreground" aria-label="Channel" />
                           )}
                           <span className="truncate">{chat.name}</span>
+                          {mutedRooms[chat.id] > Date.now() && (
+                            <BellSlash className="size-3.5 shrink-0 text-muted-foreground" aria-label="Dibisukan" />
+                          )}
                         </span>
                         {chat.lastMessageTime && (
                           <span
@@ -635,7 +640,13 @@ export function AppSidebar({
                               </span>
                             )}
                             <span
-                              className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold tabular-nums text-primary-foreground"
+                              className={cn(
+                                "flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums",
+                                // Muted rooms keep their count, in grey.
+                                mutedRooms[chat.id] > Date.now() && !chat.hasMention
+                                  ? "bg-muted-foreground/30 text-foreground/80"
+                                  : "bg-primary text-primary-foreground"
+                              )}
                               aria-label={`${chat.unreadCount} pesan belum dibaca`}
                             >
                               {chat.unreadCount > 99 ? "99+" : Math.max(1, chat.unreadCount)}

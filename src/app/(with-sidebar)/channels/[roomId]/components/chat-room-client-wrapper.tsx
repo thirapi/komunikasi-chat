@@ -8,7 +8,7 @@ import { clientChatCache } from "@/lib/infrastructure/cache/client-cache";
 import { Warning } from "@phosphor-icons/react/dist/ssr";
 import LoadingRoom from "../room-skeleton";
 import { useCurrentUser, type CurrentUser } from "@/components/current-user-provider";
-import type { MessageWithUserDTO } from "@/lib/entities/models/message.model";
+import type { MessageWithUserDTO, PinnedMessageDTO } from "@/lib/entities/models/message.model";
 
 /**
  * How many cached messages to mount when a room opens. Mounting the whole cache
@@ -37,6 +37,8 @@ type RoomState = {
   user: CurrentUser;
   /** True once the data comes from the server rather than the local cache. */
   isFresh: boolean;
+  /** Pinned messages; undefined until the server snapshot is in. */
+  pins?: PinnedMessageDTO[];
 };
 
 function fromMemory(roomId: string, user: CurrentUser | null): RoomState | null {
@@ -141,6 +143,7 @@ export function ChatRoomClientWrapper({ roomId }: { roomId: string }) {
           lastReadAt,
           user,
           isFresh: true,
+          pins: snapshot.data.pins,
         });
       } catch (e) {
         console.error("Initialization error:", e);
@@ -179,6 +182,7 @@ export function ChatRoomClientWrapper({ roomId }: { roomId: string }) {
       lastReadAt={data.lastReadAt}
       user={data.user}
       isFresh={data.isFresh}
+      pins={data.pins}
     />
   );
 }

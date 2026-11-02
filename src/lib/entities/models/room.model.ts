@@ -22,6 +22,8 @@ export interface SidebarRoomDTO {
   hasMention: boolean;
   /** Unread messages from others, capped at 100 (shown as "99+"). */
   unreadCount: number;
+  /** Muted until this time, or null. */
+  mutedUntil: Date | null;
   type: "channel" | "direct";
   userId?: string;
   lastMessage?: string;
@@ -39,6 +41,7 @@ export interface SidebarRoomRow {
   roomAvatar: string;
   isDirect: boolean;
   lastReadAt: Date | null;
+  mutedUntil: Date | null;
   lastMessageId: string | null;
   lastMessageContent: string | null;
   lastMessageUserId: string | null;

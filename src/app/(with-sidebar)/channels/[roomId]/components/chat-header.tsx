@@ -18,6 +18,7 @@ import dynamic from "next/dynamic";
 import { useConnectionStatus } from "@/hooks/use-connection-status";
 import { Shortcut } from "@/components/ui/kbd";
 import { isPlainLeftClick, navigateToRoom } from "@/lib/chat/room-navigation";
+import { MuteMenu } from "./mute-menu";
 
 // 800-line dialog pulling in Tabs, ScrollArea, AlertDialog, Switch and the
 // image lightbox. It only renders when room details are opened, so it is split
@@ -207,6 +208,8 @@ export function ChatHeader({
               <p>Cari di room ini</p>
             </TooltipContent>
           </Tooltip>
+
+          <MuteMenu roomId={roomData.id} />
 
           <Tooltip>
             <TooltipTrigger asChild>

@@ -21,6 +21,7 @@ type ServerRoomUnread = {
   hasUnread: boolean;
   hasMention: boolean;
   unreadCount?: number;
+  mutedUntil?: Date | string | null;
   lastMessageTime?: Date | string | null;
 };
 
@@ -45,6 +46,10 @@ interface UnreadContextType {
   roomTyping: Record<string, RoomTyping>;
   /** name = null clears it (typing stopped or their message arrived). */
   setRoomTyping: (roomId: string, userId: string, name: string | null) => void;
+  /** Rooms muted right now (expired mutes drop out on their own). */
+  mutedRooms: Record<string, number>;
+  isMuted: (roomId: string) => boolean;
+  setMuted: (roomId: string, mutedUntil: Date | string | null) => void;
   markAsRead: (roomId: string) => void;
   markAsUnread: (roomId: string, hasMention?: boolean) => void;
   initializeUnread: (rooms: ServerRoomUnread[]) => void;
@@ -108,11 +113,51 @@ export function UnreadProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // Muted rooms: roomId -> muted until (ms). Only active mutes are kept, and
+  // a timer drops each one when it expires so badges turn back on by
+  // themselves.
+  const [mutedRooms, setMutedRooms] = useState<Record<string, number>>({});
+  const setMuted = useCallback((roomId: string, mutedUntil: Date | string | null) => {
+    const until = mutedUntil ? new Date(mutedUntil).getTime() : 0;
+    setMutedRooms((prev) => {
+      if (until > Date.now()) return prev[roomId] === until ? prev : { ...prev, [roomId]: until };
+      if (!(roomId in prev)) return prev;
+      const next = { ...prev };
+      delete next[roomId];
+      return next;
+    });
+  }, []);
+  useEffect(() => {
+    const now = Date.now();
+    const soonest = Math.min(...Object.values(mutedRooms), Infinity);
+    if (!Number.isFinite(soonest)) return;
+    // setTimeout overflows past ~24.8 days; re-check daily for long mutes.
+    const t = setTimeout(() => {
+      setMutedRooms((prev) => {
+        const at = Date.now();
+        const next = Object.fromEntries(Object.entries(prev).filter(([, until]) => until > at));
+        return Object.keys(next).length === Object.keys(prev).length ? prev : next;
+      });
+    }, Math.min(Math.max(0, soonest - now) + 50, 24 * 60 * 60 * 1000));
+    return () => clearTimeout(t);
+  }, [mutedRooms]);
+  const mutedRoomsRef = useRef(mutedRooms);
+  mutedRoomsRef.current = mutedRooms;
+  // Stable identity (reads a ref) so listeners bound once can call it.
+  const isMuted = useCallback(
+    (roomId: string) => (mutedRoomsRef.current[roomId] ?? 0) > Date.now(),
+    [],
+  );
+
   // "(3) Komunikasi" in the tab title, like Telegram/Slack, so unread chats
-  // are visible from another tab.
+  // are visible from another tab. Muted rooms only count when they mention
+  // the user (Telegram leaves muted chats out of the total too).
   const unreadCount = useMemo(
-    () => Object.values(unreadRooms).filter((r) => r.hasUnread).length,
-    [unreadRooms],
+    () =>
+      Object.entries(unreadRooms).filter(
+        ([id, r]) => r.hasUnread && (!(mutedRooms[id] > Date.now()) || r.hasMention),
+      ).length,
+    [unreadRooms, mutedRooms],
   );
   useEffect(() => {
     const base = document.title.replace(/^\(\d+\+?\)\s*/, "");
@@ -120,6 +165,14 @@ export function UnreadProvider({ children }: { children: React.ReactNode }) {
   }, [unreadCount]);
 
   const initializeUnread = useCallback((rooms: ServerRoomUnread[]) => {
+    const now = Date.now();
+    setMutedRooms(
+      Object.fromEntries(
+        rooms
+          .map((r) => [r.id, r.mutedUntil ? new Date(r.mutedUntil).getTime() : 0] as const)
+          .filter(([, until]) => until > now),
+      ),
+    );
     setUnreadRooms((prev) => {
       const next: Record<string, UnreadRoomState> = {};
       for (const room of rooms) {
@@ -165,8 +218,8 @@ export function UnreadProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ unreadRooms, roomActivity, recordActivity, clearActivity, roomTyping, setRoomTyping, markAsRead, markAsUnread, initializeUnread }),
-    [unreadRooms, roomActivity, recordActivity, clearActivity, roomTyping, setRoomTyping, markAsRead, markAsUnread, initializeUnread],
+    () => ({ unreadRooms, roomActivity, recordActivity, clearActivity, roomTyping, setRoomTyping, mutedRooms, isMuted, setMuted, markAsRead, markAsUnread, initializeUnread }),
+    [unreadRooms, roomActivity, recordActivity, clearActivity, roomTyping, setRoomTyping, mutedRooms, isMuted, setMuted, markAsRead, markAsUnread, initializeUnread],
   );
 
   return (

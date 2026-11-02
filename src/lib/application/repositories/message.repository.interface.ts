@@ -1,4 +1,4 @@
-import { MessageWithUserDTO } from "@/lib/entities/models/message.model";
+import { MessageWithUserDTO, PinnedMessageDTO } from "@/lib/entities/models/message.model";
 import { AttachmentWithMessageDTO } from "@/lib/entities/models/attachment.model";
 
 export interface IMessageRepository {
@@ -26,6 +26,10 @@ export interface IMessageRepository {
    * that is not deleted. Their files must not be removed from storage.
    */
   getAttachmentUrlsInUse(urls: string[], excludeMessageId: string): Promise<string[]>;
+  /** Pinned, non-deleted messages of a room, most recently pinned first. */
+  getPinnedMessages(roomId: string, limit: number): Promise<PinnedMessageDTO[]>;
+  /** Pin (with who pinned it) or unpin (null). Also bumps updatedAt. */
+  setPinned(messageId: string, pinnedBy: string | null): Promise<void>;
   /** Bump updatedAt so delta sync picks up a change stored elsewhere (reactions). */
   touchMessage(messageId: string): Promise<void>;
   getRoomIdByMessageId(messageId: string): Promise<string | null>;

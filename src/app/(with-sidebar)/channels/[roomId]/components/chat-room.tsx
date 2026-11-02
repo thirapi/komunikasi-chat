@@ -3,12 +3,13 @@
 import { roomChannel } from "@/lib/pusher/channels";
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from "react";
 import { getPusher } from "@/lib/pusher/pusher.client";
-import { getMessage, updateLastReadAt, editMessageAction, toggleReactionAction, syncRoomMessages } from "../messages.action";
+import { getMessage, updateLastReadAt, editMessageAction, toggleReactionAction, syncRoomMessages, togglePinAction } from "../messages.action";
+import { PinnedBanner } from "./pinned-banner";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { createId } from "@paralleldrive/cuid2";
 
-import { MessageWithUserDTO } from "@/lib/entities/models/message.model";
+import { MessageWithUserDTO, PinnedMessageDTO } from "@/lib/entities/models/message.model";
 import { RoomWithParticipantsDTO } from "@/lib/entities/models/room.model";
 
 import { MessageList } from "./message-list";
@@ -53,6 +54,8 @@ interface ChatRoomProps {
   lastReadAt: Date | null;
   /** Data came from the server (false while showing the local cache). */
   isFresh?: boolean;
+  /** Pinned messages from the server snapshot (undefined while on cache). */
+  pins?: PinnedMessageDTO[];
   user: {
     id: string;
     name: string;
@@ -69,13 +72,14 @@ export function ChatRoom({
   lastReadAt,
   user,
   isFresh = false,
+  pins: snapshotPins,
 }: ChatRoomProps) {
   const [messages, setMessages] = useState(initialMessages);
   const [localRoomData, setLocalRoomData] = useState(roomData);
   const { onlineUserIds } = usePresence();
   const [missedCount, setMissedCount] = useState(0);
   const [canShowJump, setCanShowJump] = useState(false);
-  const { markAsRead: markSidebarAsRead, recordActivity, clearActivity } = useUnread();
+  const { markAsRead: markSidebarAsRead, recordActivity, clearActivity, isMuted } = useUnread();
   const [showMembers, setShowMembers] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<MessageWithUserDTO | null>(null);
@@ -105,6 +109,25 @@ export function ChatRoom({
     const at = new Date(peer.lastReadAt);
     setPeerReadAt((prev) => (!prev || at > prev ? at : prev));
   }, [roomData, userId]);
+  // Pinned messages (banner under the header). Updated from the snapshot and
+  // live from the room channel.
+  const [pins, setPins] = useState<PinnedMessageDTO[]>(snapshotPins ?? []);
+  useEffect(() => {
+    if (snapshotPins) setPins(snapshotPins);
+  }, [snapshotPins]);
+  const pinnedIds = useMemo(() => new Set(pins.map((p) => p.id)), [pins]);
+  // Mirrors TogglePinUseCase; admins are not known here but the server allows
+  // them, and anyone else would only get an error back.
+  const canPin = roomData.isDirect || roomData.ownerId === userId;
+  const handleTogglePin = useCallback(async (messageId: string) => {
+    const res = await togglePinAction(messageId);
+    if (res.status !== "success" || !res.data) {
+      toast.error(res.error?.message || "Gagal menyematkan pesan");
+      return;
+    }
+    setPins(res.data.pins);
+    toast(res.data.pinned ? "Pesan disematkan" : "Sematan dilepas", { duration: 2000 });
+  }, []);
   const [highlightedMessageId, setHighlightedMessageId] = useState<
     string | null
   >(null);
@@ -317,6 +340,9 @@ export function ChatRoom({
 
   const sendNotification = useCallback(
     (msg: MessageWithUserDTO) => {
+      // Muted room: stay silent unless the message mentions this user.
+      const raw = msg.content || "";
+      if (isMuted(roomData.id) && !raw.includes(`<@${userId}>`) && !raw.includes("<@everyone>")) return;
       try {
         const audio = new Audio("/sounds/message-notification.mp3");
         audio.play().catch((e) => console.warn("Audio play failed", e));
@@ -351,7 +377,7 @@ export function ChatRoom({
         );
       }
     },
-    [roomData.name, roomData.id, roomData.isDirect, userId, user.username, localRoomData.participants],
+    [roomData.name, roomData.id, roomData.isDirect, userId, user.username, localRoomData.participants, isMuted],
   );
 
   const commitRead = useCallback(
@@ -877,6 +903,9 @@ export function ChatRoom({
     chatChannel.bind("new-message", (msg: MessageWithUserDTO) =>
       handleNewMessage(msg),
     );
+    chatChannel.bind("pins-changed", (data: { pins: PinnedMessageDTO[] }) => {
+      if (Array.isArray(data?.pins)) setPins(data.pins);
+    });
     chatChannel.bind("read-receipt", (data: { userId: string; lastReadAt: string }) => {
       if (!data?.userId || data.userId === userId || !data.lastReadAt) return;
       const at = new Date(data.lastReadAt);
@@ -923,6 +952,8 @@ export function ChatRoom({
       // The newest message going away changes this room's chat-list preview.
       // The deleter gets no user-channel notification for their own delete,
       // so refresh the list from here too (bursts are coalesced).
+      // A deleted message cannot stay pinned.
+      setPins((prev) => (prev.some((p) => p.id === messageId) ? prev.filter((p) => p.id !== messageId) : prev));
       const list = messagesRef.current;
       if (list.length > 0 && list[list.length - 1].id === messageId) {
         clearActivity(roomData.id);
@@ -1127,6 +1158,12 @@ export function ChatRoom({
         onlineUserIds={onlineUserIds}
         onUpdateRoom={handleUpdateRoom}
       />
+      <PinnedBanner
+        pins={pins}
+        canUnpin={canPin}
+        onJump={scrollToMessage}
+        onUnpin={handleTogglePin}
+      />
       <div className="flex flex-1 min-h-0 overflow-hidden">
         <div className="relative flex flex-col flex-1 min-h-0 overflow-hidden" {...dropHandlers}>
           {isDraggingFiles && (
@@ -1155,6 +1192,8 @@ export function ChatRoom({
               lastReadAt={lastReadAtState}
               unreadSettled={unreadSettled}
               peerReadAt={peerReadAt}
+              pinnedIds={pinnedIds}
+              onTogglePin={canPin ? handleTogglePin : undefined}
               onLoadMore={loadMoreMessages}
               hasMore={hasMore}
               isLoadingMore={isLoadingMore}

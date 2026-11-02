@@ -105,6 +105,7 @@ export class RoomRepository implements IRoomRepository {
         r."avatar"                      AS "roomAvatar",
         r."isDirect"                    AS "isDirect",
         me."lastReadAt"                 AS "lastReadAt",
+        me."mutedUntil"                 AS "mutedUntil",
         lm."id"                         AS "lastMessageId",
         lm."content"                    AS "lastMessageContent",
         lm."userId"                     AS "lastMessageUserId",
@@ -352,7 +353,7 @@ export class RoomRepository implements IRoomRepository {
   async getOtherParticipants(
     roomId: string,
     excludeUserId: string
-  ): Promise<{ userId: string }[]> {
+  ): Promise<{ userId: string; mutedUntil: Date | null }[]> {
     const others = await this.client.query.roomParticipants.findMany({
       where: and(
         eq(roomParticipants.roomId, roomId),
@@ -360,10 +361,18 @@ export class RoomRepository implements IRoomRepository {
       ),
       columns: {
         userId: true,
+        mutedUntil: true,
       },
     });
 
     return others;
+  }
+
+  async setMutedUntil(userId: string, roomId: string, mutedUntil: Date | null): Promise<void> {
+    await this.client
+      .update(roomParticipants)
+      .set({ mutedUntil })
+      .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)));
   }
 
   /**
