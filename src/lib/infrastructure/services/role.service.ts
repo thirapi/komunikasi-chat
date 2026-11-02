@@ -30,7 +30,7 @@ export class RoleService implements IRoleService {
 
   async isUserProtected(userId: string): Promise<boolean> {
     const roles = await this.getUserRoles(userId);
-    return roles.includes("admin"); 
+    return roles.includes("admin") || roles.includes("super_admin"); 
   }
   
 }

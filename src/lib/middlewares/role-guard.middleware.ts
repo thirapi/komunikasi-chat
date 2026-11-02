@@ -11,6 +11,6 @@ export async function adminGuard() {
     const user = await roleService.getUserWithRolesFromSession(session);
     if (!user) return false;
 
-    const hasAdmin = user.roles.some(role => role.name === "admin");
+    const hasAdmin = user.roles.some(role => role.name === "admin" || role.name === "super_admin");
     return hasAdmin;
 }

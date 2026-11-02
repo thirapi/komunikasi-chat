@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { messages, attachments as attachmentsTable, roomParticipants, polls, pollOptions, hiddenMessages } from "@/lib/infrastructure/drizzle/schema";
-import { eq, ne, asc, desc, lt, gt, and, ilike, or, like, inArray, isNotNull, notExists, sql } from "drizzle-orm";
+import { eq, ne, asc, desc, lt, gt, and, ilike, or, like, inArray, notInArray, isNotNull, notExists, sql } from "drizzle-orm";
 import { IMessageRepository, NewPoll } from "@/lib/application/repositories/message.repository.interface";
 import {
   MessageWithUserDTO,
@@ -208,11 +208,12 @@ export class MessageRepository implements IMessageRepository {
 
   /** Not hidden by this viewer ("delete for me"). */
   private notHiddenBy(viewerId: string) {
-    return notExists(
+    return notInArray(
+      messages.id,
       this.client
-        .select({ one: sql`1` })
+        .select({ messageId: hiddenMessages.messageId })
         .from(hiddenMessages)
-        .where(and(eq(hiddenMessages.messageId, messages.id), eq(hiddenMessages.userId, viewerId))),
+        .where(eq(hiddenMessages.userId, viewerId)),
     );
   }
 

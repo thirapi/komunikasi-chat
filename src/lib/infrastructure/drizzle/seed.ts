@@ -61,29 +61,35 @@ async function main() {
         where: eq(rolesTable.name, "admin"),
     });
 
+    const superAdminRole = await db.query.roles.findFirst({
+        where: eq(rolesTable.name, "super_admin"),
+    });
+
     const allPermissions = await db.query.permissions.findMany();
 
-    if (adminRole) {
-        for (const perm of allPermissions) {
-            const existing = await db.query.rolePermissions.findFirst({
-                where: and(
-                    eq(rolePermissions.roleId, adminRole.id),
-                    eq(rolePermissions.permissionId, perm.id)
-                ),
-            });
-
-            if (!existing) {
-                await db.insert(rolePermissions).values({
-                    id: createId(),
-                    roleId: adminRole.id,
-                    permissionId: perm.id,
+    for (const targetRole of [adminRole, superAdminRole]) {
+        if (targetRole) {
+            for (const perm of allPermissions) {
+                const existing = await db.query.rolePermissions.findFirst({
+                    where: and(
+                        eq(rolePermissions.roleId, targetRole.id),
+                        eq(rolePermissions.permissionId, perm.id)
+                    ),
                 });
+
+                if (!existing) {
+                    await db.insert(rolePermissions).values({
+                        id: createId(),
+                        roleId: targetRole.id,
+                        permissionId: perm.id,
+                    });
+                }
             }
         }
     }
 
     // 3. Default Channel
-    const defaultRoomID = "cmak9alli0000i5sei9vn5szl";
+    const defaultRoomID = "general-channel";
     const existingRoom = await db.query.rooms.findFirst({
         where: eq(roomsTable.id, defaultRoomID),
     });
@@ -92,6 +98,8 @@ async function main() {
         await db.insert(roomsTable).values({
             id: defaultRoomID,
             name: "general",
+            description: "Channel utama untuk semua anggota",
+            isPublic: true,
             isDirect: false,
         });
         console.log(`💬 Created default channel: general`);
@@ -104,45 +112,71 @@ async function main() {
         {
             id: "cmak9alli0001i5sei9vn5szl",
             username: "dev",
+            name: "Dev",
             password: hashedPassword,
             avatar: "https://api.dicebear.com/9.x/glass/svg?seed=dex",
+            roles: [adminRole?.id].filter(Boolean) as string[],
         },
         {
             id: "cmak9alli0002i5sei9vn5szl",
             username: "dev2",
+            name: "Dev 2",
             password: hashedPassword,
             avatar: "https://api.dicebear.com/9.x/glass/svg?seed=Felix",
+            roles: [adminRole?.id].filter(Boolean) as string[],
         }
     ];
 
-    for (const user of devUsers) {
+    for (const { roles, ...user } of devUsers) {
+        let userId = user.id;
         const existingUser = await db.query.users.findFirst({
             where: eq(usersTable.username, user.username),
         });
 
         if (!existingUser) {
             await db.insert(usersTable).values(user);
-            console.log(`👤 Created dev user: ${user.username}`);
+            console.log(`👤 Created user: ${user.username}`);
+        } else {
+            userId = existingUser.id;
+            await db.update(usersTable).set({ password: user.password }).where(eq(usersTable.id, userId));
+            console.log(`👤 Updated user: ${user.username}`);
+        }
 
-            if (adminRole) {
+        for (const roleId of roles) {
+            const hasUserRole = await db.query.userRoles.findFirst({
+                where: and(
+                    eq(userRolesTable.userId, userId),
+                    eq(userRolesTable.roleId, roleId)
+                ),
+            });
+            if (!hasUserRole) {
                 await db.insert(userRolesTable).values({
                     id: createId(),
-                    userId: user.id,
-                    roleId: adminRole.id,
+                    userId,
+                    roleId,
                 });
             }
+        }
 
-            // Join general channel
+        // Join general channel
+        const inRoom = await db.query.roomParticipants.findFirst({
+            where: and(
+                eq(roomParticipantsTable.roomId, defaultRoomID),
+                eq(roomParticipantsTable.userId, userId)
+            ),
+        });
+        if (!inRoom) {
             await db.insert(roomParticipantsTable).values({
                 id: createId(),
                 roomId: defaultRoomID,
-                userId: user.id,
+                userId,
                 lastReadAt: new Date(),
             });
         }
     }
 
     console.log("✅ Seeding selesai.");
+    process.exit(0);
 }
 
 main()
