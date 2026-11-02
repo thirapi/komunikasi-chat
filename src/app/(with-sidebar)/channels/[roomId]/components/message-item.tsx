@@ -123,13 +123,14 @@ const MARKDOWN_CODE_COMPONENTS = {
     );
   },
 };
-import { ArrowBendUpLeft, File, DownloadSimple, Trash, Copy, PencilSimple, Check, Checks, WarningCircle, PushPin, PushPinSlash } from "@phosphor-icons/react/dist/ssr";
+import { ArrowBendUpLeft, File, DownloadSimple, Trash, Copy, PencilSimple, Check, Checks, WarningCircle, PushPin, PushPinSlash, ShareFat } from "@phosphor-icons/react/dist/ssr";
 import { Button } from "@/components/ui/button";
 import { useState, useMemo, useEffect, useRef, useCallback, memo } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { hapticLight, hapticMedium } from "@/lib/native/haptics";
 import { useMessageGestures } from "./hooks/use-message-gestures";
 import { LinkPreviewCard } from "./link-preview-card";
+import { VoiceNotePlayer } from "./voice-note-player";
 import {
   Tooltip,
   TooltipContent,
@@ -212,6 +213,7 @@ export function MessageItemComponent({
   receipt,
   isPinned = false,
   onTogglePin,
+  onForward,
 }: {
   message: MessageWithUserDTO;
   onlineUserIds: string[];
@@ -234,6 +236,7 @@ export function MessageItemComponent({
   isPinned?: boolean;
   /** Present when the viewer may pin in this room. */
   onTogglePin?: (messageId: string) => void;
+  onForward?: (messageId: string) => void;
 }) {
   const router = useRouter();
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -460,6 +463,11 @@ const isVideo = (url: string) => {
     return VIDEO_REGEX.test(url) || url.startsWith('data:video/');
 };
 
+/** Voice notes and other audio, by declared type or extension. */
+const AUDIO_REGEX = /\.(weba|m4a|mp3|oga|opus|wav|aac)$/i;
+const isAudio = (a: { url: string; fileType?: string | null }) =>
+    (a.fileType ?? "").startsWith("audio/") || AUDIO_REGEX.test(a.url);
+
 const getFileName = (url: string) => {
     try {
         const parts = url.split('/');
@@ -486,7 +494,7 @@ const getFileName = (url: string) => {
 
   const imagesAndVideos = useMemo(() => {
     return (message.attachments || [])
-      .filter(a => isImage(a.url) || isVideo(a.url))
+      .filter(a => !isAudio(a) && (isImage(a.url) || isVideo(a.url)))
       .map(a => ({
         url: getProxiedUrl(a.url),
         filename: getFileName(a.url),
@@ -495,8 +503,10 @@ const getFileName = (url: string) => {
   }, [message.attachments]);
 
   const otherFiles = useMemo(() => {
-    return (message.attachments || []).filter(a => !isImage(a.url) && !isVideo(a.url));
+    return (message.attachments || []).filter(a => !isAudio(a) && !isImage(a.url) && !isVideo(a.url));
   }, [message.attachments]);
+
+  const audioFiles = useMemo(() => (message.attachments || []).filter(isAudio), [message.attachments]);
 
   const openLightbox = (index: number) => {
     setInitialImageIndex(index);
@@ -938,6 +948,13 @@ const getFileName = (url: string) => {
           </div>
         )}
 
+        {message.isForwarded && !isEditing && (
+          <div className="flex items-center gap-1 text-[11px] italic text-muted-foreground">
+            <ShareFat className="h-3 w-3" />
+            Diteruskan
+          </div>
+        )}
+
         {/* === INLINE EDIT MODE === */}
         {isEditing ? (
           <div className="mt-1 mb-1.5" onClick={(e) => e.stopPropagation()}>
@@ -1057,6 +1074,14 @@ const getFileName = (url: string) => {
                     )}
                   </button>
                 ))}
+              </div>
+            )}
+
+            {audioFiles.length > 0 && (
+              <div className="flex flex-col gap-1">
+                {audioFiles.map((a) =>
+                  a.url ? <VoiceNotePlayer key={a.id} src={getProxiedUrl(a.url)} /> : null,
+                )}
               </div>
             )}
 
@@ -1250,6 +1275,22 @@ const getFileName = (url: string) => {
                     </button>
                   </TooltipTrigger>
                   <TooltipContent side="top" className="text-xs py-1 px-2">Salin teks</TooltipContent>
+                </Tooltip>
+              )}
+
+              {onForward && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => onForward(message.id)}
+                      className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      aria-label="Teruskan"
+                    >
+                      <ShareFat className="w-4 h-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs py-1 px-2">Teruskan</TooltipContent>
                 </Tooltip>
               )}
 

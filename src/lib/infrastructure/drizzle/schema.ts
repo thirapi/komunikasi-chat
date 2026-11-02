@@ -10,6 +10,11 @@ export const users = pgTable("User", {
     bio: text("bio"),
     banner: text("banner"),
     customStatus: text("customStatus"),
+    /** Last activity, written from presence heartbeats (throttled) and on going offline. */
+    lastSeenAt: timestamp("lastSeenAt"),
+    /** Privacy (both reciprocal, like WhatsApp): show exact last seen / send read receipts. */
+    showLastSeen: boolean("showLastSeen").default(true).notNull(),
+    readReceipts: boolean("readReceipts").default(true).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
 });
@@ -59,6 +64,8 @@ export const messages = pgTable("Message", {
      * longer show a message as "(diedit)".
      */
     editedAt: timestamp("editedAt"),
+    /** Forwarded from another chat (shown as "Diteruskan"; the source is not kept). */
+    isForwarded: boolean("isForwarded").default(false).notNull(),
 }, (t) => [
     // Every per-room read is "messages of room X by time": the newest page,
     // paging back, the sidebar's latest message / unread count, and delta
@@ -80,6 +87,17 @@ export const linkPreviews = pgTable("LinkPreview", {
     siteName: text("siteName"),
     fetchedAt: timestamp("fetchedAt").defaultNow().notNull(),
 });
+
+/** A user blocking another: their DM is closed both ways (channels unaffected). */
+export const userBlocks = pgTable("UserBlock", {
+    id: text("id").primaryKey(),
+    blockerId: text("blockerId").notNull().references(() => users.id),
+    blockedId: text("blockedId").notNull().references(() => users.id),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => [
+    unique("UserBlock_pair_unq").on(t.blockerId, t.blockedId),
+    index("UserBlock_blockedId_idx").on(t.blockedId),
+]);
 
 export const messagesRelations = relations(messages, ({ one, many }) => ({
     user: one(users, { fields: [messages.userId], references: [users.id] }),

@@ -1,4 +1,6 @@
 import { roomChannel } from "@/lib/pusher/channels";
+import type { IUserBlockRepository } from "../../repositories/user-block.repository.interface";
+import { BlockError, BLOCKED_DM_MESSAGE } from "../users/block-user.use-case";
 import { MessageWithUserDTO } from "../../../entities/models/message.model";
 import { IMessageRepository } from "../../repositories/message.repository.interface";
 import { IRoomRepository } from "../../repositories/room.repository.interface";
@@ -18,8 +20,20 @@ export class SendMessageUseCase {
     private discordNotifierService: INotifierService,
     private pushSubscriptionRepository: IPushSubscriptionRepository,
     private webPushService: IWebPushService,
-    private idempotencyStore?: IIdempotencyStore
+    private idempotencyStore?: IIdempotencyStore,
+    private blockRepository?: Pick<IUserBlockRepository, "getStatus">,
   ) { }
+
+  /** A DM closed by a block (either way) takes no new messages. */
+  private async assertNotBlocked(userId: string, roomId: string) {
+    if (!this.blockRepository) return;
+    const access = await this.roomRepository.getRoomAccess(roomId, userId);
+    if (!access.isDirect) return;
+    const [other] = await this.roomRepository.getOtherParticipants(roomId, userId);
+    if (!other) return;
+    const status = await this.blockRepository.getStatus(userId, other.userId);
+    if (status.iBlocked || status.blockedMe) throw new BlockError(BLOCKED_DM_MESSAGE);
+  }
 
   async execute(
     userId: string,
@@ -27,8 +41,11 @@ export class SendMessageUseCase {
     roomId: string,
     replyTo?: string,
     attachments?: { url: string; key: string; fileType: string; size?: number }[],
-    optimisticId?: string
+    optimisticId?: string,
+    options?: { isForwarded?: boolean }
   ): Promise<MessageWithUserDTO> {
+    await this.assertNotBlocked(userId, roomId);
+
     // A retry of the same optimistic send (the first response was lost, or the
     // user pressed "Coba lagi") returns the already-created message instead of
     // posting a duplicate. Best effort: if the store is unreachable we send.
@@ -58,7 +75,8 @@ export class SendMessageUseCase {
         content,
         roomId,
         replyTo,
-        attachments
+        attachments,
+        options
       );
     } catch (err) {
       if (claimed && idemKey) await this.idempotencyStore?.release(idemKey).catch(() => {});

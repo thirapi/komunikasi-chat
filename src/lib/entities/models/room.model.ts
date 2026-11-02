@@ -69,6 +69,13 @@ export interface RoomWithParticipantsDTO extends RoomRecord {  createdAt: Date;
       banner?: string | null;
       customStatus?: string | null;
       createdAt: Date;
+      /** Exact last activity, only when both sides allow it (see GetRoomByIdUseCase). */
+      lastSeenAt?: Date | null;
+      /** Rough last seen when the exact time is hidden. */
+      lastSeenLabel?: LastSeenLabel | null;
+      /** Privacy flags; only kept on the viewer's own entry. */
+      showLastSeen?: boolean;
+      readReceipts?: boolean;
       userRoles: {
         role: {
           name: string;
@@ -86,3 +93,6 @@ export interface RoomWithParticipantsDTO extends RoomRecord {  createdAt: Date;
     isDeleted?: boolean;
   }[];
 }
+
+/** Telegram-style rough last seen, used when the exact time is private. */
+export type LastSeenLabel = "recently" | "week" | "month" | "long";

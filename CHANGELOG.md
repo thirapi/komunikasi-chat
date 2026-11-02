@@ -11,6 +11,31 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+#### Forward, voice messages, blocking, last seen and privacy
+
+Middle ground between WhatsApp, Telegram and Teams again.
+
+- **Forward** a message to up to 5 chats. It shows as "Diteruskan" without
+  naming the source chat. Attachments are taken from the stored message (the
+  same files are reused), and mentions become plain `@name` text so
+  forwarding `@everyone` or a mention from another room pings nobody.
+- **Voice messages**: tap the mic (shown while the composer is empty), then
+  send or discard; up to 10 minutes, Opus/WebM or AAC/MP4 on Safari,
+  uploaded straight to R2 and played in a compact player (one at a time).
+  The media proxy now also passes audio.
+- **Block** someone from the DM details: the DM closes both ways (enforced in
+  `SendMessageUseCase`, so forwards and voice notes too), no new DM can be
+  started (existing history stays readable), shared channels are unaffected,
+  and both sides see a notice instead of the composer, live.
+- **Last seen** in the DM header ("terakhir dilihat 5 menit lalu"), written
+  from presence heartbeats at most every 2 minutes and on going offline.
+- **Privacy settings** (Pengaturan → Privasi): last seen and read receipts can
+  be turned off, reciprocally. Hidden last seen shows Telegram-style
+  "baru-baru ini / minggu ini / bulan ini". Filtering happens on the server
+  per viewer; people who blocked each other see no last seen at all.
+  Limitation: the online dot is still broadcast globally and is only hidden
+  in the DM view across a block.
+
 #### Mute, pinned messages and link previews
 
 Design choices take the middle ground between WhatsApp, Telegram and Teams.

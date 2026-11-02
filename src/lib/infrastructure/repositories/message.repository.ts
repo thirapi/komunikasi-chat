@@ -17,7 +17,8 @@ export class MessageRepository implements IMessageRepository {
     content: string,
     roomId: string,
     replyTo?: string,
-    attachments?: { url: string; key: string; fileType: string; size?: number }[]
+    attachments?: { url: string; key: string; fileType: string; size?: number }[],
+    options?: { isForwarded?: boolean }
   ): Promise<MessageWithUserDTO> {
     const id = createId();
 
@@ -28,6 +29,7 @@ export class MessageRepository implements IMessageRepository {
         content,
         roomId,
         replyTo,
+        isForwarded: options?.isForwarded ?? false,
       });
 
       if (attachments && attachments.length > 0) {

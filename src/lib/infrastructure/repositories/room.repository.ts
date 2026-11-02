@@ -21,6 +21,9 @@ const PARTICIPANT_USER_COLUMNS = {
   banner: true,
   customStatus: true,
   createdAt: true,
+  lastSeenAt: true,
+  showLastSeen: true,
+  readReceipts: true,
 } as const;
 
 export class RoomRepository implements IRoomRepository {
@@ -74,6 +77,9 @@ export class RoomRepository implements IRoomRepository {
           banner: p.user.banner,
           customStatus: p.user.customStatus,
           createdAt: p.user.createdAt,
+          lastSeenAt: p.user.lastSeenAt,
+          showLastSeen: p.user.showLastSeen,
+          readReceipts: p.user.readReceipts,
           userRoles: p.user.userRoles.map((ur) => ({
             role: { name: ur.role.name },
           })),

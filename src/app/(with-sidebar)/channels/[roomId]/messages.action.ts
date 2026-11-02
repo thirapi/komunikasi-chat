@@ -17,7 +17,7 @@ import { ServerResponse } from "@/lib/entities/models/response.model";
 import { getMessageController } from "@/lib/interface-adapters/controllers/messages/get-message.controller";
 import { syncRoomMessagesController } from "@/lib/interface-adapters/controllers/messages/sync-room-messages.controller";
 import { togglePinController } from "@/lib/interface-adapters/controllers/messages/toggle-pin.controller";
-import { sendMessageController } from "@/lib/interface-adapters/controllers/messages/send-message.controller";
+import { sendMessageController, forwardMessageController } from "@/lib/interface-adapters/controllers/messages/send-message.controller";
 import {
   startTypingController,
   stopTypingController,
@@ -257,6 +257,18 @@ export const syncRoomMessages = async (roomId: string, since?: Date | string | n
       data: null,
       error: { message: err.message || "Terjadi kesalahan internal", type: err.name },
     };
+  }
+};
+
+/** Forward a message to up to 5 chats the user is in. */
+export const forwardMessageAction = async (messageId: string, targetRoomIds: string[]) => {
+  try {
+    const actorId = await requireWriter();
+    const result = await forwardMessageController(actorId, messageId, targetRoomIds);
+    return { status: "success" as const, data: result, error: null };
+  } catch (err: any) {
+    console.error("Action Error:", err);
+    return { status: "error" as const, data: null, error: { message: err.message || "Gagal meneruskan pesan", type: err.name } };
   }
 };
 

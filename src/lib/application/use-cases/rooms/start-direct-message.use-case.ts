@@ -1,9 +1,13 @@
 import { RoomWithParticipantsDTO } from "@/lib/entities/models/room.model";
 import { IRoomRepository } from "../../repositories/room.repository.interface";
 import { avatarService } from "@/lib/infrastructure/services/avatar.service";
+import type { IUserBlockRepository } from "../../repositories/user-block.repository.interface";
 
 export class StartDirectMessageUseCase {
-  constructor(private roomRepository: IRoomRepository) {}
+  constructor(
+    private roomRepository: IRoomRepository,
+    private blockRepository?: Pick<IUserBlockRepository, "getStatus">,
+  ) {}
 
   async execute(
     currentUserId: string,
@@ -22,6 +26,15 @@ export class StartDirectMessageUseCase {
         room: existingRoom,
         action: "existing",
       };
+    }
+
+    // An existing DM still opens (its history stays readable, as in WhatsApp);
+    // a new one cannot be started across a block in either direction.
+    if (this.blockRepository) {
+      const status = await this.blockRepository.getStatus(currentUserId, targetUserId);
+      if (status.iBlocked || status.blockedMe) {
+        throw new Error("Tidak bisa memulai percakapan dengan pengguna ini");
+      }
     }
 
     const avatar = avatarService.generateAvatarUrl(`${currentUserId}-${targetUserId}`);

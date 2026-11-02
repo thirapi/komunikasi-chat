@@ -1,7 +1,8 @@
 import { FileStorageInterface, UploadUrlResult } from "../../services/file-storage.interface";
 
-/** MIME types users may upload: images, video, and common documents. */
+/** MIME types users may upload: images, video, voice notes, and common documents. */
 const ALLOWED_TYPES = [
+  /^audio\/(webm|ogg|mp4|mpeg|aac|x-m4a|wav)$/i,
   /^image\/(png|jpe?g|gif|webp|avif|heic|heif)$/i,
   /^video\/(mp4|webm|ogg|quicktime)$/i,
   /^application\/pdf$/i,

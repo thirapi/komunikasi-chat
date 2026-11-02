@@ -9,6 +9,7 @@ import { Warning } from "@phosphor-icons/react/dist/ssr";
 import LoadingRoom from "../room-skeleton";
 import { useCurrentUser, type CurrentUser } from "@/components/current-user-provider";
 import type { MessageWithUserDTO, PinnedMessageDTO } from "@/lib/entities/models/message.model";
+import type { BlockStatus } from "@/lib/entities/models/block.model";
 
 /**
  * How many cached messages to mount when a room opens. Mounting the whole cache
@@ -39,6 +40,7 @@ type RoomState = {
   isFresh: boolean;
   /** Pinned messages; undefined until the server snapshot is in. */
   pins?: PinnedMessageDTO[];
+  block?: BlockStatus | null;
 };
 
 function fromMemory(roomId: string, user: CurrentUser | null): RoomState | null {
@@ -144,6 +146,7 @@ export function ChatRoomClientWrapper({ roomId }: { roomId: string }) {
           user,
           isFresh: true,
           pins: snapshot.data.pins,
+          block: snapshot.data.block,
         });
       } catch (e) {
         console.error("Initialization error:", e);
@@ -183,6 +186,7 @@ export function ChatRoomClientWrapper({ roomId }: { roomId: string }) {
       user={data.user}
       isFresh={data.isFresh}
       pins={data.pins}
+      block={data.block}
     />
   );
 }

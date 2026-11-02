@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { users, userRoles, roomParticipants, sessions, pushSubscriptions, messageReactions, activityLogs, messages, attachments, rooms } from "@/lib/infrastructure/drizzle/schema";
+import { users, userRoles, roomParticipants, sessions, pushSubscriptions, messageReactions, activityLogs, messages, attachments, rooms, userBlocks } from "@/lib/infrastructure/drizzle/schema";
 import { eq, and, sql, like, inArray, or } from "drizzle-orm";
 import { IUserRepository } from "@/lib/application/repositories/user.repository.interface";
 import { UserRecord } from "@/lib/entities/models/user.model";
@@ -28,6 +28,8 @@ export class UserRepository implements IUserRepository {
       await tx.delete(roomParticipants).where(eq(roomParticipants.userId, userId));
       await tx.delete(messageReactions).where(eq(messageReactions.userId, userId));
       await tx.delete(activityLogs).where(eq(activityLogs.userId, userId));
+      // Blocks in either direction reference the user (foreign keys).
+      await tx.delete(userBlocks).where(or(eq(userBlocks.blockerId, userId), eq(userBlocks.blockedId, userId)));
 
       await tx.update(rooms).set({ ownerId: null }).where(eq(rooms.ownerId, userId));
       await tx.delete(users).where(eq(users.id, userId));

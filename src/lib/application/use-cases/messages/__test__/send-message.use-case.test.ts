@@ -82,7 +82,7 @@ describe("SendMessageUseCase", () => {
     const useCase = createUseCase()
     const result = await useCase.execute("user1", "Hello", "room1")
 
-    expect(mockRepo.createMessage).toHaveBeenCalledWith("user1", "Hello", "room1", undefined, undefined)
+    expect(mockRepo.createMessage).toHaveBeenCalledWith("user1", "Hello", "room1", undefined, undefined, undefined)
     expect(mockPusher.trigger).toHaveBeenCalledWith("private-chat-room1", "new-message", mockMessage)
     expect(result).toEqual(mockMessage)
   })
@@ -107,7 +107,7 @@ describe("SendMessageUseCase", () => {
       attachments
     )
 
-    expect(mockRepo.createMessage).toHaveBeenCalledWith("user1", "Hello with image", "room1", "reply123", attachments)
+    expect(mockRepo.createMessage).toHaveBeenCalledWith("user1", "Hello with image", "room1", "reply123", attachments, undefined)
     expect(mockPusher.trigger).toHaveBeenCalledWith("private-chat-room1", "new-message", mockMessage)
     expect(result).toEqual(mockMessage)
   })
@@ -167,7 +167,7 @@ describe("SendMessageUseCase", () => {
       videoAttachments
     )
 
-    expect(mockRepo.createMessage).toHaveBeenCalledWith("user1", "Check out this video", "room1", undefined, videoAttachments)
+    expect(mockRepo.createMessage).toHaveBeenCalledWith("user1", "Check out this video", "room1", undefined, videoAttachments, undefined)
     expect(mockPusher.trigger).toHaveBeenCalledWith("private-chat-room1", "new-message", mockMessage)
     expect(result.attachments?.[0].fileType).toBe("video/mp4")
     expect(result).toEqual(mockMessage)

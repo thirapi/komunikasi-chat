@@ -5,4 +5,6 @@ export interface IPresenceService {
     setOffline(userId: string): Promise<void>;
     getOnlineUserIds(): Promise<string[]>;
     isUserOnline(userId: string): Promise<boolean>;
+    /** True at most once per `ttlSeconds` per key (Redis SET NX EX). */
+    claimThrottle?(key: string, ttlSeconds: number): Promise<boolean>;
 }

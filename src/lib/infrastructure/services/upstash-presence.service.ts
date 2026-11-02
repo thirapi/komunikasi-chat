@@ -20,6 +20,11 @@ export class UpstashPresenceService implements IPresenceService {
             .exec();
     }
 
+    async claimThrottle(key: string, ttlSeconds: number): Promise<boolean> {
+        const res = await this.redis.set(`throttle:${key}`, "1", { nx: true, ex: ttlSeconds });
+        return res === "OK";
+    }
+
     async setOffline(userId: string): Promise<void> {
         await this.redis
             .multi()

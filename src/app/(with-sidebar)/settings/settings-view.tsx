@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { CaretLeft, CaretRight, Camera, CircleNotch, User, Key, PaintBrush, Info, Desktop, Sun, Moon, Check } from "@phosphor-icons/react/dist/ssr";
-import { updateUserAction, changePasswordAction } from "../user.action";
+import { CaretLeft, CaretRight, Camera, CircleNotch, User, Key, PaintBrush, Info, Desktop, Sun, Moon, Check, LockSimple } from "@phosphor-icons/react/dist/ssr";
+import { updateUserAction, changePasswordAction, getPrivacyAction, updatePrivacyAction } from "../user.action";
+import { Switch } from "@/components/ui/switch";
 import { uploadFileResult } from "@/lib/chat/upload";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,7 @@ import { isNative, platform } from "@/lib/native/platform";
 const sections = [
     { id: "profile", label: "Profil", description: "Nama, username, foto, bio", icon: User },
     { id: "security", label: "Keamanan", description: "Ganti password", icon: Key },
+    { id: "privacy", label: "Privasi", description: "Terakhir dilihat, tanda dibaca", icon: LockSimple },
     { id: "appearance", label: "Tampilan", description: "Tema terang atau gelap", icon: PaintBrush },
     { id: "about", label: "Tentang", description: "Versi aplikasi", icon: Info },
 ] as const;
@@ -221,6 +223,81 @@ function SecurityForm({ user }: { user: NonNullable<SettingsViewProps["user"]> }
     );
 }
 
+function PrivacyRow({
+    label,
+    description,
+    checked,
+    disabled,
+    onChange,
+}: {
+    label: string;
+    description: string;
+    checked: boolean;
+    disabled: boolean;
+    onChange: (value: boolean) => void;
+}) {
+    const id = React.useId();
+    return (
+        <div className="flex items-start gap-4 px-3 py-3">
+            <div className="min-w-0 flex-1">
+                <label htmlFor={id} className="text-sm font-medium">{label}</label>
+                <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+            </div>
+            <Switch id={id} checked={checked} disabled={disabled} onCheckedChange={onChange} />
+        </div>
+    );
+}
+
+/**
+ * Both settings are reciprocal, as in WhatsApp: turning one off also hides
+ * the same information about other people from you.
+ */
+function PrivacySection() {
+    const [settings, setSettings] = React.useState<{ showLastSeen: boolean; readReceipts: boolean } | null>(null);
+    React.useEffect(() => {
+        getPrivacyAction().then((res) => {
+            if (res.status === "success" && res.data) setSettings(res.data);
+        });
+    }, []);
+
+    const change = async (key: "showLastSeen" | "readReceipts", value: boolean) => {
+        if (!settings) return;
+        const previous = settings;
+        setSettings({ ...settings, [key]: value });
+        const res = await updatePrivacyAction({ [key]: value });
+        if (res.status !== "success" || !res.data) {
+            setSettings(previous);
+            toast.error(res.error?.message || "Gagal menyimpan");
+            return;
+        }
+        setSettings(res.data);
+    };
+
+    return (
+        <div className="space-y-3">
+            <div className="divide-y divide-border rounded-md border border-border">
+                <PrivacyRow
+                    label="Tampilkan terakhir dilihat"
+                    description="Jika dimatikan, orang lain hanya melihat perkiraan (misalnya “baru-baru ini”), dan kamu juga tidak bisa melihat waktu terakhir dilihat orang lain."
+                    checked={settings?.showLastSeen ?? true}
+                    disabled={!settings}
+                    onChange={(v) => change("showLastSeen", v)}
+                />
+                <PrivacyRow
+                    label="Tanda dibaca"
+                    description="Centang biru (✓✓) di pesan langsung. Jika dimatikan, kamu juga tidak melihat tanda dibaca dari orang lain."
+                    checked={settings?.readReceipts ?? true}
+                    disabled={!settings}
+                    onChange={(v) => change("readReceipts", v)}
+                />
+            </div>
+            <p className="text-xs text-muted-foreground">
+                Pengguna yang kamu blokir tidak bisa melihat terakhir dilihatmu.
+            </p>
+        </div>
+    );
+}
+
 function AppearanceSection() {
     const { theme, setTheme } = useTheme();
     const [mounted, setMounted] = React.useState(false);
@@ -389,6 +466,7 @@ export default function SettingsView({ user }: SettingsViewProps) {
                         <h2 className="mb-6 hidden text-lg font-semibold tracking-tight md:block">{current.label}</h2>
                         {active === "profile" && <ProfileForm user={user} />}
                         {active === "security" && <SecurityForm user={user} />}
+                        {active === "privacy" && <PrivacySection />}
                         {active === "appearance" && <AppearanceSection />}
                         {active === "about" && <AboutSection />}
                     </div>

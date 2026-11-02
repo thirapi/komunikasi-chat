@@ -11,6 +11,9 @@ import { DiscordNotifierService } from "@/lib/infrastructure/services/discord-no
 import { PushSubscriptionRepository } from "@/lib/infrastructure/repositories/push-subscription.repository";
 import { WebPushService } from "@/lib/infrastructure/services/web-push.service";
 import { UpstashIdempotencyStore } from "@/lib/infrastructure/services/upstash-idempotency.service";
+import { UserRepository } from "@/lib/infrastructure/repositories/user.repository";
+import { UserBlockRepository } from "@/lib/infrastructure/repositories/user-block.repository";
+import { ForwardMessageUseCase } from "@/lib/application/use-cases/messages/forward-message.use-case";
 
 const messageRepository = new MessageRepository(db);
 const roomRepository = new RoomRepository(db)
@@ -26,7 +29,8 @@ const sendMessageUseCase = new SendMessageUseCase(
     discordNotifierService,
     pushSubscriptionRepository,
     webPushService,
-    new UpstashIdempotencyStore()
+    new UpstashIdempotencyStore(),
+    new UserBlockRepository(db),
 );
 
 const formSchema = z.object({
@@ -78,4 +82,23 @@ export const sendMessageController = async (
         parsedMessage.data.attachments,
         parsedMessage.data.optimisticId
     );
+};
+const forwardMessageUseCase = new ForwardMessageUseCase(messageRepository, roomRepository, new UserRepository(db));
+
+/** Forward a message to up to 5 chats: validate, then a normal send per target. */
+export const forwardMessageController = async (userId: string, messageId: string, targetRoomIds: string[]) => {
+    const parsed = z.object({ messageId: z.string().min(1), targetRoomIds: z.array(z.string().min(1)).max(20) })
+        .safeParse({ messageId, targetRoomIds });
+    if (!parsed.success) throw new InputParsedError("Invalid input: ", parsed.error.flatten().fieldErrors);
+
+    const payload = await forwardMessageUseCase.prepare(userId, parsed.data.messageId, parsed.data.targetRoomIds);
+    const results = await Promise.allSettled(
+        payload.targetRoomIds.map((roomId) =>
+            sendMessageUseCase.execute(userId, payload.content, roomId, undefined, payload.attachments, undefined, { isForwarded: true }),
+        ),
+    );
+    return {
+        sent: payload.targetRoomIds.filter((_, i) => results[i].status === "fulfilled"),
+        failed: payload.targetRoomIds.filter((_, i) => results[i].status === "rejected"),
+    };
 };

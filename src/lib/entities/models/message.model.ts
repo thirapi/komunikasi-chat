@@ -10,6 +10,7 @@ export interface MessageRecord {
   isDeleted: boolean;
   pinnedAt?: Date | null;
   editedAt?: Date | null;
+  isForwarded?: boolean;
   pinnedBy?: string | null;
   createdAt: Date;
   updatedAt: Date;

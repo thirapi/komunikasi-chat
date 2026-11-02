@@ -6,10 +6,12 @@ import { PusherService } from "@/lib/infrastructure/services/pusher.service";
 import { UpdatePresenceUseCase } from "@/lib/application/use-cases/presence/update-presence.use-case";
 import { ServerResponse } from "@/lib/entities/models/response.model";
 import { AuthorizationError, getActor } from "@/lib/auth/actor";
+import { UserPrivacyRepository } from "@/lib/infrastructure/repositories/user-privacy.repository";
+import { db } from "@/lib/db";
 
 const presenceService = new UpstashPresenceService();
 const pusherService = new PusherService();
-const updatePresenceUseCase = new UpdatePresenceUseCase(presenceService, pusherService);
+const updatePresenceUseCase = new UpdatePresenceUseCase(presenceService, pusherService, new UserPrivacyRepository(db));
 
 export const updatePresenceAction = async (
     userId: string,

@@ -17,7 +17,7 @@ export const runtime = "nodejs";
  *  - http(s) only, and every hop (including redirects) must resolve to a
  *    public IP — the check runs inside the socket's DNS lookup, so the address
  *    that was validated is the one connected to (no DNS-rebinding window);
- *  - only raster images and video are passed through (no HTML, no SVG), with
+ *  - only raster images, video and audio are passed through (no HTML, no SVG), with
  *    `nosniff` and a sandboxing CSP, so the proxy can never serve active
  *    content from this origin;
  *  - size cap, timeout and redirect limit.
@@ -26,7 +26,8 @@ export const runtime = "nodejs";
 const MAX_BYTES = 25 * 1024 * 1024;
 const TIMEOUT_MS = 10_000;
 const MAX_REDIRECTS = 3;
-const ALLOWED_TYPE = /^(image\/(png|jpe?g|gif|webp|avif|bmp|x-icon|vnd\.microsoft\.icon)|video\/(mp4|webm|ogg|quicktime))$/i;
+// Audio is passive media like video (voice notes); same nosniff + sandbox CSP.
+const ALLOWED_TYPE = /^(image\/(png|jpe?g|gif|webp|avif|bmp|x-icon|vnd\.microsoft\.icon)|video\/(mp4|webm|ogg|quicktime)|audio\/(webm|ogg|mp4|mpeg|aac|x-m4a|wav))$/i;
 
 class ProxyError extends Error {
   constructor(public status: number, message: string) {
@@ -61,7 +62,7 @@ function fetchOnce(url: URL): Promise<{ status: number; headers: http.IncomingHt
     const client = url.protocol === "https:" ? https : http;
     const req = client.get(
       url,
-      { lookup: safeLookup, timeout: TIMEOUT_MS, headers: { "User-Agent": "Komunikasi/1.0", Accept: "image/*,video/*" } },
+      { lookup: safeLookup, timeout: TIMEOUT_MS, headers: { "User-Agent": "Komunikasi/1.0", Accept: "image/*,video/*,audio/*" } },
       (res) => {
         const status = res.statusCode ?? 502;
         if (status >= 300 && status < 400) {

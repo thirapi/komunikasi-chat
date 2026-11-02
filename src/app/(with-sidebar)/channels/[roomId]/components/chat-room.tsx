@@ -5,6 +5,9 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } fr
 import { getPusher } from "@/lib/pusher/pusher.client";
 import { getMessage, updateLastReadAt, editMessageAction, toggleReactionAction, syncRoomMessages, togglePinAction } from "../messages.action";
 import { PinnedBanner } from "./pinned-banner";
+import { ForwardDialog } from "./forward-dialog";
+import { setUserBlockedAction } from "@/app/(with-sidebar)/user.action";
+import type { BlockStatus } from "@/lib/entities/models/block.model";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { createId } from "@paralleldrive/cuid2";
@@ -56,6 +59,8 @@ interface ChatRoomProps {
   isFresh?: boolean;
   /** Pinned messages from the server snapshot (undefined while on cache). */
   pins?: PinnedMessageDTO[];
+  /** DM block relation from the snapshot. */
+  block?: BlockStatus | null;
   user: {
     id: string;
     name: string;
@@ -73,6 +78,7 @@ export function ChatRoom({
   user,
   isFresh = false,
   pins: snapshotPins,
+  block: snapshotBlock,
 }: ChatRoomProps) {
   const [messages, setMessages] = useState(initialMessages);
   const [localRoomData, setLocalRoomData] = useState(roomData);
@@ -95,7 +101,13 @@ export function ChatRoom({
   const [lastReadAtState, setLastReadAtState] = useState<Date | null>(
     lastReadAt,
   );
-  // DM read receipts: how far the other participant has read.
+  // DM read receipts: how far the other participant has read. Reciprocal:
+  // with your own receipts off you do not see theirs (the server already
+  // leaves their read position out of the room data then).
+  const myReadReceipts =
+    roomData.participants?.find((p) => p.user.id === userId)?.user.readReceipts !== false;
+  const myReadReceiptsRef = useRef(myReadReceipts);
+  myReadReceiptsRef.current = myReadReceipts;
   const [peerReadAt, setPeerReadAt] = useState<Date | null>(() => {
     if (!roomData.isDirect) return null;
     const peer = roomData.participants?.find((p) => p.user.id !== userId);
@@ -128,6 +140,29 @@ export function ChatRoom({
     setPins(res.data.pins);
     toast(res.data.pinned ? "Pesan disematkan" : "Sematan dilepas", { duration: 2000 });
   }, []);
+  const [forwardingMessageId, setForwardingMessageId] = useState<string | null>(null);
+  // DM blocks: the composer is replaced by a notice while either side blocks.
+  const [blockStatus, setBlockStatus] = useState<BlockStatus | null>(snapshotBlock ?? null);
+  useEffect(() => {
+    if (snapshotBlock !== undefined) setBlockStatus(snapshotBlock);
+  }, [snapshotBlock]);
+  const dmPartner = roomData.isDirect ? roomData.participants?.find((p) => p.user.id !== userId)?.user : undefined;
+  const blockedNotice = blockStatus?.iBlocked
+    ? `Kamu memblokir ${dmPartner?.name || dmPartner?.username || "pengguna ini"}. Buka blokir di detail percakapan untuk mengirim pesan.`
+    : blockStatus?.blockedMe
+      ? "Kamu tidak bisa membalas percakapan ini."
+      : null;
+  const handleToggleBlock = useCallback(async () => {
+    if (!dmPartner) return;
+    const next = !blockStatus?.iBlocked;
+    const res = await setUserBlockedAction(dmPartner.id, next);
+    if (res.status !== "success" || !res.data) {
+      toast.error(res.error?.message || "Gagal memperbarui blokir");
+      return;
+    }
+    setBlockStatus(res.data);
+    toast(next ? "Pengguna diblokir" : "Blokir dibuka", { duration: 2000 });
+  }, [dmPartner, blockStatus?.iBlocked]);
   const [highlightedMessageId, setHighlightedMessageId] = useState<
     string | null
   >(null);
@@ -903,11 +938,20 @@ export function ChatRoom({
     chatChannel.bind("new-message", (msg: MessageWithUserDTO) =>
       handleNewMessage(msg),
     );
+    chatChannel.bind("block-changed", (data: { blockerId: string; blockedId: string; blocked: boolean }) => {
+      setBlockStatus((prev) => {
+        const base = prev ?? { iBlocked: false, blockedMe: false };
+        if (data.blockerId === userId) return { ...base, iBlocked: data.blocked };
+        if (data.blockedId === userId) return { ...base, blockedMe: data.blocked };
+        return prev;
+      });
+    });
     chatChannel.bind("pins-changed", (data: { pins: PinnedMessageDTO[] }) => {
       if (Array.isArray(data?.pins)) setPins(data.pins);
     });
     chatChannel.bind("read-receipt", (data: { userId: string; lastReadAt: string }) => {
       if (!data?.userId || data.userId === userId || !data.lastReadAt) return;
+      if (!myReadReceiptsRef.current) return;
       const at = new Date(data.lastReadAt);
       setPeerReadAt((prev) => (!prev || at > prev ? at : prev));
     });
@@ -1157,6 +1201,8 @@ export function ChatRoom({
         membersVisible={showMembers}
         onlineUserIds={onlineUserIds}
         onUpdateRoom={handleUpdateRoom}
+        blockStatus={blockStatus}
+        onToggleBlock={roomData.isDirect ? handleToggleBlock : undefined}
       />
       <PinnedBanner
         pins={pins}
@@ -1194,6 +1240,7 @@ export function ChatRoom({
               peerReadAt={peerReadAt}
               pinnedIds={pinnedIds}
               onTogglePin={canPin ? handleTogglePin : undefined}
+              onForward={setForwardingMessageId}
               onLoadMore={loadMoreMessages}
               hasMore={hasMore}
               isLoadingMore={isLoadingMore}
@@ -1248,6 +1295,7 @@ export function ChatRoom({
             onUploadProgress={handleUploadProgress}
             fileDropRef={fileDropRef}
             user={user}
+            blockedNotice={blockedNotice}
           />
         </div>
         {showMembers && !isMobile && (
@@ -1264,6 +1312,11 @@ export function ChatRoom({
         isOpen={showMembers && !!isMobile}
         onClose={() => setShowMembers(false)}
         currentUserId={userId}
+      />
+      <ForwardDialog
+        messageId={forwardingMessageId}
+        currentUserId={userId}
+        onOpenChange={(open) => !open && setForwardingMessageId(null)}
       />
       <MessageSearch
         isOpen={isSearchOpen}

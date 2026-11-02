@@ -1,6 +1,8 @@
 "use server";
 
 import { getOptionalViewer, requireReader, requireWriter } from "@/lib/auth/actor";
+import { getPrivacyController, updatePrivacyController } from "@/lib/interface-adapters/controllers/users/privacy-settings.controller";
+import { blockUserController } from "@/lib/interface-adapters/controllers/users/block-user.controller";
 import { ServerResponse } from "@/lib/entities/models/response.model";
 import { UserRecord } from "@/lib/entities/models/user.model";
 import { AttachmentWithMessageDTO } from "@/lib/entities/models/attachment.model";
@@ -127,5 +129,36 @@ export const getSharedMediaAction = async (currentUserId: string, profileUsernam
         message: err.message || "Failed to load media",
       },
     };
+  }
+};
+
+/** Block or unblock a user (closes your DM with them both ways). */
+export const setUserBlockedAction = async (targetUserId: string, block: boolean) => {
+  try {
+    const actorId = await requireWriter();
+    const status = await blockUserController(actorId, targetUserId, block);
+    return { status: "success" as const, data: status, error: null };
+  } catch (err: any) {
+    return { status: "error" as const, data: null, error: { message: err.message || "Gagal memperbarui blokir", type: err.name } };
+  }
+};
+
+/** The signed-in user's privacy settings. */
+export const getPrivacyAction = async () => {
+  try {
+    const actorId = await requireWriter();
+    return { status: "success" as const, data: await getPrivacyController(actorId), error: null };
+  } catch (err: any) {
+    return { status: "error" as const, data: null, error: { message: err.message, type: err.name } };
+  }
+};
+
+/** Update last-seen / read-receipt visibility (both reciprocal). */
+export const updatePrivacyAction = async (patch: { showLastSeen?: boolean; readReceipts?: boolean }) => {
+  try {
+    const actorId = await requireWriter();
+    return { status: "success" as const, data: await updatePrivacyController(actorId, patch ?? {}), error: null };
+  } catch (err: any) {
+    return { status: "error" as const, data: null, error: { message: err.message || "Gagal menyimpan", type: err.name } };
   }
 };

@@ -19,6 +19,7 @@ import { useConnectionStatus } from "@/hooks/use-connection-status";
 import { Shortcut } from "@/components/ui/kbd";
 import { isPlainLeftClick, navigateToRoom } from "@/lib/chat/room-navigation";
 import { MuteMenu } from "./mute-menu";
+import type { BlockStatus } from "@/lib/entities/models/block.model";
 
 // 800-line dialog pulling in Tabs, ScrollArea, AlertDialog, Switch and the
 // image lightbox. It only renders when room details are opened, so it is split
@@ -28,6 +29,31 @@ const RoomDetailDialog = dynamic(
   { ssr: false },
 );
 
+const LAST_SEEN_LABELS: Record<string, string> = {
+  recently: "terakhir dilihat baru-baru ini",
+  week: "terakhir dilihat minggu ini",
+  month: "terakhir dilihat bulan ini",
+  long: "terakhir dilihat sudah lama",
+};
+
+/** "terakhir dilihat 5 menit lalu" / "… kemarin 21.04" / rough label when exact is private. */
+function formatLastSeen(user?: { lastSeenAt?: Date | string | null; lastSeenLabel?: string | null } | null) {
+  if (!user) return null;
+  if (user.lastSeenAt) {
+    const at = new Date(user.lastSeenAt);
+    const diff = Date.now() - at.getTime();
+    const time = at.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+    if (diff < 60_000) return "terakhir dilihat baru saja";
+    if (diff < 60 * 60_000) return `terakhir dilihat ${Math.floor(diff / 60_000)} menit lalu`;
+    const today = new Date();
+    const yesterday = new Date(today.getTime() - 24 * 60 * 60_000);
+    if (at.toDateString() === today.toDateString()) return `terakhir dilihat hari ini ${time}`;
+    if (at.toDateString() === yesterday.toDateString()) return `terakhir dilihat kemarin ${time}`;
+    return `terakhir dilihat ${at.toLocaleDateString("id-ID", { day: "numeric", month: "short" })} ${time}`;
+  }
+  return user.lastSeenLabel ? LAST_SEEN_LABELS[user.lastSeenLabel] ?? null : null;
+}
+
 interface ChatHeaderProps {
   roomData: RoomWithParticipantsDTO;
   currentUserId: string;
@@ -36,6 +62,8 @@ interface ChatHeaderProps {
   membersVisible: boolean;
   onlineUserIds: string[];
   onUpdateRoom?: (data: Partial<RoomWithParticipantsDTO>) => void;
+  blockStatus?: BlockStatus | null;
+  onToggleBlock?: () => void;
 }
 
 export function ChatHeader({
@@ -46,6 +74,8 @@ export function ChatHeader({
   membersVisible,
   onlineUserIds,
   onUpdateRoom,
+  blockStatus,
+  onToggleBlock,
 }: ChatHeaderProps) {
   const router = useRouter();
   const [showDetails, setShowDetails] = useState(false);
@@ -69,9 +99,12 @@ export function ChatHeader({
     return roomData.name;
   }, [roomData, otherUser]);
 
+  const isBlocked = !!(blockStatus?.iBlocked || blockStatus?.blockedMe);
   const isOtherUserOnline = useMemo(() => {
-    return otherUser ? onlineUserIds.includes(otherUser.id) : false;
-  }, [otherUser, onlineUserIds]);
+    // Across a block neither side sees the other's online status.
+    return otherUser && !isBlocked ? onlineUserIds.includes(otherUser.id) : false;
+  }, [otherUser, onlineUserIds, isBlocked]);
+  const lastSeenText = useMemo(() => formatLastSeen(otherUser), [otherUser]);
 
   const onlineCount = useMemo(() => {
     return roomData.participants.filter((p) =>
@@ -152,7 +185,9 @@ export function ChatHeader({
                   {connection === "connecting" ? "Menghubungkan…" : "Tidak ada koneksi"}
                 </span>
               ) : roomData.isDirect ? (
-                otherUser?.customStatus || (isOtherUserOnline ? "Online" : `@${otherUser?.username ?? ""}`)
+                isOtherUserOnline
+                  ? "Online"
+                  : (!isBlocked && lastSeenText) || otherUser?.customStatus || `@${otherUser?.username ?? ""}`
               ) : (
                 <>
                   {roomData.participants.length} anggota
@@ -259,6 +294,8 @@ export function ChatHeader({
         onUpdateRoom={onUpdateRoom}
         onlineUserIds={onlineUserIds}
         onSearch={onToggleSearch}
+        blockStatus={blockStatus}
+        onToggleBlock={onToggleBlock}
       />
     </div>
   );

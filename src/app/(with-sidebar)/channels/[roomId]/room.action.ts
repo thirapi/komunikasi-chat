@@ -15,6 +15,8 @@ import { syncRoomMessagesController } from "@/lib/interface-adapters/controllers
 import type { RoomSync } from "@/lib/application/use-cases/messages/sync-room-messages.use-case";
 import { getPinnedMessagesController } from "@/lib/interface-adapters/controllers/messages/toggle-pin.controller";
 import type { PinnedMessageDTO } from "@/lib/entities/models/message.model";
+import type { BlockStatus } from "@/lib/entities/models/block.model";
+import { getRoomBlockStatusController } from "@/lib/interface-adapters/controllers/users/block-user.controller";
 import { getLastReadAtController } from "@/lib/interface-adapters/controllers/rooms/get-last-read-at.controller";
 import { setRoomMuteController } from "@/lib/interface-adapters/controllers/rooms/set-room-mute.controller";
 import { getRoomByUserIdController } from "@/lib/interface-adapters/controllers/rooms/get-room-by-user-id.controller";
@@ -56,8 +58,9 @@ export const getRoom = async (
   roomId: string
 ): Promise<ServerResponse<RoomWithParticipantsDTO | null>> => {
   try {
-    await assertCanReadRoom(roomId, await requireReader());
-    const room = await getRoomByIdController(roomId);
+    const viewerId = await requireReader();
+    await assertCanReadRoom(roomId, viewerId);
+    const room = await getRoomByIdController(roomId, viewerId);
 
     return {
       status: "success",
@@ -99,13 +102,15 @@ export const getRoomSnapshot = async (
     lastRead: { id: string | null; at: Date | null };
     sync: RoomSync;
     pins: PinnedMessageDTO[];
+    /** DMs only: block relation with the other person. */
+    block: BlockStatus | null;
   } | null>
 > => {
   try {
     const viewerId = await requireReader();
     await assertCanReadRoom(roomId, viewerId);
     const [room, sync, lastRead, pins] = await Promise.all([
-      getRoomByIdController(roomId),
+      getRoomByIdController(roomId, viewerId),
       syncRoomMessagesController(roomId, since ? new Date(since) : null),
       getLastReadAtController(viewerId, roomId),
       getPinnedMessagesController(roomId),
@@ -113,7 +118,8 @@ export const getRoomSnapshot = async (
     if (!room) {
       return { status: "error", data: null, error: { message: "Room tidak ditemukan", type: "NotFound" } };
     }
-    return { status: "success", data: { room, lastRead, sync, pins }, error: null };
+    const block = await getRoomBlockStatusController(viewerId, room);
+    return { status: "success", data: { room, lastRead, sync, pins, block }, error: null };
   } catch (err: any) {
     console.error("Action Error:", err);
     return {

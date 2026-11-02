@@ -31,6 +31,7 @@ export function MessageList({
   peerReadAt = null,
   pinnedIds,
   onTogglePin,
+  onForward,
   userId,
   onLoadMore,
   hasMore,
@@ -64,6 +65,7 @@ export function MessageList({
   pinnedIds?: Set<string>;
   /** Present when this user may pin in this room. */
   onTogglePin?: (messageId: string) => void;
+  onForward?: (messageId: string) => void;
   userId: string;
   onLoadMore: () => void;
   hasMore: boolean;
@@ -247,6 +249,7 @@ export function MessageList({
           roomData={roomData}
           isPinned={pinnedIds?.has(msg.id) ?? false}
           onTogglePin={onTogglePin}
+          onForward={onForward}
           receipt={
             roomData.isDirect && msg.userId === userId && !msg.isOptimistic && !msg.sendError
               ? peerReadTime >= msgTime ? "read" : "sent"

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, forwardRef } from "react";
+import { Prohibit } from "@phosphor-icons/react/dist/ssr";
+import type { BlockStatus } from "@/lib/entities/models/block.model";
 import {
   Hash, Globe, Lock, CircleNotch, Camera, X, SignOut, UserMinus, Crown,
   MagnifyingGlass, UserPlus, LinkSimple, Gear, ImageSquare, User as UserIcon,
@@ -50,6 +52,9 @@ interface RoomDetailDialogProps {
   onlineUserIds?: string[];
   /** Opens in-room message search (the dialog closes first). */
   onSearch?: () => void;
+  blockStatus?: BlockStatus | null;
+  /** DMs: block or unblock the other person. */
+  onToggleBlock?: () => void;
 }
 
 // Flat tones drawn from the app palette (see globals.css chart colours).
@@ -70,6 +75,8 @@ export function RoomDetailDialog({
   onUpdateRoom,
   onlineUserIds = [],
   onSearch,
+  blockStatus,
+  onToggleBlock,
 }: RoomDetailDialogProps) {
   const [name, setName] = useState(roomData.name);
   const [description, setDescription] = useState(roomData.description ?? "");
@@ -520,6 +527,23 @@ export function RoomDetailDialog({
               )}
               {isDirect && otherUser && (
                 <QuickAction icon={UserIcon} label="Profil" href={`/profile/${otherUser.username}`} onClick={() => onOpenChange(false)} />
+              )}
+              {isDirect && otherUser && onToggleBlock && (
+                <QuickAction
+                  icon={Prohibit}
+                  label={blockStatus?.iBlocked ? "Buka blokir" : "Blokir"}
+                  tone={blockStatus?.iBlocked ? "default" : "danger"}
+                  onClick={() => {
+                    if (
+                      blockStatus?.iBlocked ||
+                      window.confirm(
+                        `Blokir ${otherUser.name || otherUser.username}? Kalian tidak bisa saling mengirim pesan di sini, dan status online kalian tersembunyi satu sama lain.`,
+                      )
+                    ) {
+                      onToggleBlock();
+                    }
+                  }}
+                />
               )}
               {!isDirect && isOwner && <QuickAction icon={UserPlus} label="Undang" onClick={() => setShowInvite(true)} />}
               {canShareLink && <QuickAction icon={LinkSimple} label="Salin tautan" onClick={copyJoinLink} />}

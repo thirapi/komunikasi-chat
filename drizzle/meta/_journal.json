@@ -204,6 +204,13 @@
       "when": 1793580273610,
       "tag": "0028_mute_pins_link_previews_edited_at",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1793581170686,
+      "tag": "0029_forward_blocks_privacy",
+      "breakpoints": true
     }
   ]
 }
