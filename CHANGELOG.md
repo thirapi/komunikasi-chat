@@ -156,6 +156,16 @@ simpler unread/mention indicators.
 
 ### Fixed
 
+#### Migrations stuck since 0026
+
+`drizzle/0026` could never run: its `DROP TABLE "Post" CASCADE` already removed
+a foreign key that a later statement dropped again, so `db:migrate` failed
+there and every later migration stayed pending. 0026 now keeps only the
+non-destructive `PushSubscription` changes, re-runnable; dropping the old
+microblog tables and columns (with their data) is the opt-in
+`scripts/sql/drop-microblog-tables.sql`. `scripts/inspect-migration-state.ts`
+(read-only) shows which migrations are recorded and which effects exist.
+
 #### Deleting a channel failed
 
 `deleteRoom` deleted the room's messages while reactions, attachments (and
