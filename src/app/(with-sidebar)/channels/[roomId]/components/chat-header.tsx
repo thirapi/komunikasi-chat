@@ -122,7 +122,7 @@ export function ChatHeader({
               variant="ghost"
               size="icon"
               asChild
-              className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors shrink-0 -ml-1 mr-0.5"
+              className="h-10 w-10 md:h-8 md:w-8 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors shrink-0 -ml-1 mr-0.5"
               aria-label="Kembali ke channels"
             >
               <Link
@@ -233,7 +233,7 @@ export function ChatHeader({
                   variant="ghost"
                   size="icon"
                   onClick={onToggleSearch}
-                  className="md:hidden h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors flex-shrink-0"
+                  className="md:hidden h-10 w-10 md:h-8 md:w-8 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors flex-shrink-0"
                 >
                   <MagnifyingGlass className="h-[18px] w-[18px]" />
                 </Button>
@@ -252,7 +252,7 @@ export function ChatHeader({
                 variant="ghost"
                 size="icon"
                 onClick={() => setShowDetails(true)}
-                className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors flex-shrink-0"
+                className="h-10 w-10 md:h-8 md:w-8 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors flex-shrink-0"
               >
                 <Info className="h-[18px] w-[18px]" />
               </Button>
@@ -271,7 +271,7 @@ export function ChatHeader({
                 className={cn(
                   // The desktop member panel only exists from lg up; between md
                   // and lg this button had nothing to toggle.
-                  "md:hidden lg:inline-flex h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors flex-shrink-0",
+                  "hidden lg:inline-flex h-10 w-10 md:h-8 md:w-8 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors flex-shrink-0",
                   membersVisible && "bg-muted text-foreground",
                 )}
               >

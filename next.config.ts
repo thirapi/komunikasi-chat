@@ -29,6 +29,9 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  // Lets a second dev server run from the same checkout (each dist dir has its
+  // own lock), e.g. one against a local database: NEXT_DIST_DIR=.next-local.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   // Our own R2 files are loaded directly by the browser; only third-party
   // media goes through /api/media-proxy (whose responses Vercel caps ~4.5 MB).
   env: {

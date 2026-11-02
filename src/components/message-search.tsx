@@ -152,7 +152,7 @@ export function MessageSearch({ isOpen, onOpenChange, roomId, onSelectMessage }:
               <X className="h-3.5 w-3.5" />
             </button>
           ) : (
-            <Kbd>Esc</Kbd>
+            <Kbd className="hidden md:inline-flex">Esc</Kbd>
           )}
         </div>
 
@@ -210,7 +210,8 @@ export function MessageSearch({ isOpen, onOpenChange, roomId, onSelectMessage }:
           )}
         </div>
 
-        <div className="flex items-center gap-4 border-t border-border bg-muted/30 px-4 h-9 shrink-0 text-[11px] text-muted-foreground">
+        {/* Keyboard hints mean nothing on a phone. */}
+        <div className="hidden md:flex items-center gap-4 border-t border-border bg-muted/30 px-4 h-9 shrink-0 text-[11px] text-muted-foreground">
           <span className="flex items-center gap-1.5"><Shortcut keys={["up", "down"]} /> pilih</span>
           <span className="flex items-center gap-1.5"><Shortcut keys={["enter"]} /> buka</span>
           <span className="ml-auto hidden sm:flex items-center gap-1.5">

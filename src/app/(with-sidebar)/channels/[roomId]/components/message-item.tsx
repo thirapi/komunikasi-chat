@@ -125,8 +125,10 @@ const MARKDOWN_CODE_COMPONENTS = {
 };
 import { ArrowBendUpLeft, File, DownloadSimple, Trash, Copy, PencilSimple, Check, Checks, WarningCircle, PushPin, PushPinSlash, ShareFat, BookmarkSimple, LinkSimple } from "@phosphor-icons/react/dist/ssr";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { stripMarkdown } from "@/lib/strip-markdown";
 import { Button } from "@/components/ui/button";
-import { useState, useMemo, useEffect, useRef, useCallback, memo } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback, memo, Fragment } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { hapticLight, hapticMedium } from "@/lib/native/haptics";
 import { useMessageGestures } from "./hooks/use-message-gestures";
@@ -255,6 +257,16 @@ export function MessageItemComponent({
   const [initialImageIndex, setInitialImageIndex] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showMobileActions, setShowMobileActions] = useState(false);
+  // Touch: long-press opens a bottom sheet with the message's actions
+  // (Telegram/WhatsApp on phones) instead of the tiny hover toolbar.
+  const [actionSheetOpen, setActionSheetOpen] = useState(false);
+  // The finger that long-pressed is still down when the sheet appears; the
+  // click some browsers send on release must not hit whatever item now sits
+  // under it (a "ghost click").
+  const sheetOpenedAt = useRef(0);
+  useEffect(() => {
+    if (actionSheetOpen) sheetOpenedAt.current = Date.now();
+  }, [actionSheetOpen]);
   const isMobile = useIsMobile();
 
   // Inline edit state
@@ -796,7 +808,7 @@ const getFileName = (url: string) => {
     },
     onLongPress: () => {
       hapticMedium();
-      setShowMobileActions(true);
+      setActionSheetOpen(true);
     },
   });
 
@@ -837,8 +849,49 @@ const getFileName = (url: string) => {
 
   const createdAt = new Date(message.createdAt);
 
+  // One list of actions for the right-click menu (desktop) and the bottom
+  // sheet (touch), so both always offer the same things.
+  type MessageAction = { key: string; label: string; icon: React.ReactNode; run: () => void; destructive?: boolean };
+  const messageActions: MessageAction[] = [
+    { key: "reply", label: "Balas", icon: <ArrowBendUpLeft />, run: () => onReply(message) },
+    ...(contextSelection
+      ? [{ key: "copy-sel", label: "Salin teks terpilih", icon: <Copy />, run: () => copy(contextSelection, "Teks terpilih disalin") }]
+      : message.content && !message.poll
+        ? [{ key: "copy", label: "Salin teks", icon: <Copy />, run: handleCopy }]
+        : []),
+    ...(contextLink ? [{ key: "copy-link", label: "Salin tautan", icon: <LinkSimple />, run: () => copy(contextLink, "Tautan disalin") }] : []),
+    {
+      key: "copy-message-link",
+      label: "Salin tautan pesan",
+      icon: <LinkSimple />,
+      run: () => copy(`${window.location.origin}/channels/${message.roomId}?messageId=${encodeURIComponent(message.id)}`, "Tautan pesan disalin"),
+    },
+    ...(onForward ? [{ key: "forward", label: "Teruskan", icon: <ShareFat />, run: () => onForward(message.id) }] : []),
+    ...(onToggleSave
+      ? [{ key: "save", label: isSaved ? "Hapus dari tersimpan" : "Simpan pesan", icon: <BookmarkSimple weight={isSaved ? "fill" : "regular"} />, run: () => onToggleSave(message.id) }]
+      : []),
+    ...(onTogglePin
+      ? [{ key: "pin", label: isPinned ? "Lepas sematan" : "Sematkan", icon: isPinned ? <PushPinSlash /> : <PushPin />, run: () => onTogglePin(message.id) }]
+      : []),
+    ...(message.userId === currentUserId && !message.poll
+      ? [{ key: "edit", label: "Edit", icon: <PencilSimple />, run: () => onStartEdit(message) }]
+      : []),
+    ...(onHide || canDeleteForEveryone
+      ? [{ key: "delete", label: "Hapus", icon: <Trash />, run: () => setDeleteConfirmOpen(true), destructive: true }]
+      : []),
+  ];
+  const sheetReactions = [...QUICK_REACTIONS, "😮", "😢", "🙏"];
+  // Close the sheet first; actions that open their own dialog do so once it
+  // has animated away.
+  const runFromSheet = (fn: () => void) => {
+    if (Date.now() - sheetOpenedAt.current < 400) return;
+    setActionSheetOpen(false);
+    setTimeout(fn, 180);
+  };
+
   const canContext = !message.isOptimistic && !isEditing && !isMobile;
   return (
+    <>
     <ContextMenu>
     <ContextMenuTrigger asChild disabled={!canContext}>
     <div
@@ -851,7 +904,7 @@ const getFileName = (url: string) => {
         "hover:bg-muted/40",
         mentionsMe && "bg-amber-500/[0.07] hover:bg-amber-500/10 shadow-[inset_2px_0_0_#f59e0b]",
         isHighlighted && "bg-primary/10 hover:bg-primary/10 shadow-[inset_2px_0_0_var(--primary)]",
-        showMobileActions && isMobile && "bg-muted/50",
+        (showMobileActions || actionSheetOpen) && isMobile && "bg-muted/50",
         isEditing && "bg-muted/40",
         message.isOptimistic && !message.sendError && "opacity-60",
         // pan-y: vertical drags scroll the chat, horizontal ones are ours.
@@ -1265,7 +1318,7 @@ const getFileName = (url: string) => {
             className={cn(
               "absolute -top-4 right-3 sm:right-4 z-10 transition-opacity duration-100",
               isMobile
-                ? (showMobileActions ? "opacity-100" : "opacity-0 pointer-events-none")
+                ? "hidden"
                 : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto has-[[data-state=open]]:opacity-100 has-[[data-state=open]]:pointer-events-auto"
             )}
             onClick={(e) => e.stopPropagation()}
@@ -1487,61 +1540,67 @@ const getFileName = (url: string) => {
           ))}
         </div>
         <ContextMenuSeparator />
-        <ContextMenuItem onSelect={() => onReply(message)}>
-          <ArrowBendUpLeft /> Balas
-        </ContextMenuItem>
-        {contextSelection ? (
-          <ContextMenuItem onSelect={() => copy(contextSelection, "Teks terpilih disalin")}>
-            <Copy /> Salin teks terpilih
-          </ContextMenuItem>
-        ) : message.content ? (
-          <ContextMenuItem onSelect={handleCopy}>
-            <Copy /> Salin teks
-          </ContextMenuItem>
-        ) : null}
-        {contextLink && (
-          <ContextMenuItem onSelect={() => copy(contextLink, "Tautan disalin")}>
-            <LinkSimple /> Salin tautan
-          </ContextMenuItem>
-        )}
-        <ContextMenuItem
-          onSelect={() =>
-            copy(`${window.location.origin}/channels/${message.roomId}?messageId=${encodeURIComponent(message.id)}`, "Tautan pesan disalin")
-          }
-        >
-          <LinkSimple /> Salin tautan pesan
-        </ContextMenuItem>
-        {onForward && (
-          <ContextMenuItem onSelect={() => onForward(message.id)}>
-            <ShareFat /> Teruskan
-          </ContextMenuItem>
-        )}
-        {onToggleSave && (
-          <ContextMenuItem onSelect={() => onToggleSave(message.id)}>
-            <BookmarkSimple weight={isSaved ? "fill" : "regular"} /> {isSaved ? "Hapus dari tersimpan" : "Simpan pesan"}
-          </ContextMenuItem>
-        )}
-        {onTogglePin && (
-          <ContextMenuItem onSelect={() => onTogglePin(message.id)}>
-            {isPinned ? <PushPinSlash /> : <PushPin />} {isPinned ? "Lepas sematan" : "Sematkan"}
-          </ContextMenuItem>
-        )}
-        {message.userId === currentUserId && !message.poll && (
-          <ContextMenuItem onSelect={() => onStartEdit(message)}>
-            <PencilSimple /> Edit
-          </ContextMenuItem>
-        )}
-        {(onHide || canDeleteForEveryone) && (
-          <>
-            <ContextMenuSeparator />
-            <ContextMenuItem variant="destructive" onSelect={() => setDeleteConfirmOpen(true)}>
-              <Trash /> Hapus
+        {messageActions.map((a) => (
+          <Fragment key={a.key}>
+            {a.destructive && <ContextMenuSeparator />}
+            <ContextMenuItem variant={a.destructive ? "destructive" : "default"} onSelect={a.run}>
+              {a.icon} {a.label}
             </ContextMenuItem>
-          </>
-        )}
+          </Fragment>
+        ))}
       </ContextMenuContent>
     )}
     </ContextMenu>
+    {isMobile && !message.isOptimistic && (
+      <Sheet open={actionSheetOpen} onOpenChange={setActionSheetOpen}>
+        <SheetContent
+          side="bottom"
+          className="gap-0 rounded-t-2xl border-t-0 px-0 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 [&>button]:hidden"
+          aria-describedby={undefined}
+        >
+          <SheetTitle className="sr-only">Aksi pesan</SheetTitle>
+          <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-muted-foreground/30" aria-hidden />
+          <div className="mx-4 mb-2 rounded-xl bg-muted/60 px-3 py-2">
+            <p className="text-xs font-semibold text-foreground">{message.user?.name || message.user?.username}</p>
+            <p className="line-clamp-2 text-[13px] text-muted-foreground">
+              {message.poll ? `📊 ${message.poll.question}` : stripMarkdown(plainText()) || (message.attachments?.length ? "Lampiran" : "")}
+            </p>
+          </div>
+          <div className="flex items-center justify-between px-4 pb-2">
+            {sheetReactions.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                onClick={() => runFromSheet(() => handleToggleReaction(emoji))}
+                className="flex h-11 w-11 items-center justify-center rounded-full text-2xl transition-transform active:scale-90 hover:bg-muted"
+                aria-label={`Reaksi ${emoji}`}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+          <div className="mx-4 border-t border-border" />
+          <ul className="py-1">
+            {messageActions.map((a) => (
+              <li key={a.key}>
+                <button
+                  type="button"
+                  onClick={() => runFromSheet(a.run)}
+                  className={cn(
+                    "flex h-12 w-full items-center gap-4 px-5 text-left text-[15px] active:bg-muted [&_svg]:size-5",
+                    a.destructive ? "text-destructive" : "text-foreground [&_svg]:text-muted-foreground",
+                  )}
+                >
+                  {a.icon}
+                  {a.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </SheetContent>
+      </Sheet>
+    )}
+    </>
   );
 }
 

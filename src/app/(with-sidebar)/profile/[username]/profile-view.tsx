@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { Button } from "@/components/ui/button";
 import { usePresence } from "@/components/presence-provider";
-import { ChatText, LinkSimple, CalendarBlank, CircleNotch } from "@phosphor-icons/react/dist/ssr";
+import { ChatText, LinkSimple, CalendarBlank, CircleNotch, CaretLeft } from "@phosphor-icons/react/dist/ssr";
 import { useRouter } from "next/navigation";
 import { createRoom } from "../../channels/[roomId]/room.action";
 import { getPublicProfileAction } from "../../user.action";
@@ -94,8 +94,20 @@ export default function ProfileView({ user: initialUser, currentUser }: ProfileV
 
     return (
         <div className="h-full overflow-y-auto bg-background pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
-            <header className="sticky top-0 z-20 flex h-14 items-center border-b border-border bg-background px-4 md:px-6">
-                <h1 className="text-[15px] font-semibold tracking-tight">Profil</h1>
+            <header className="sticky top-0 z-20 flex h-14 items-center gap-1 border-b border-border bg-background px-2 md:px-6">
+                {/* Someone else's profile is reached from a chat; give a way back. */}
+                {!isOwnProfile && (
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-10 w-10 shrink-0"
+                        onClick={() => (window.history.length > 1 ? router.back() : router.push("/channels"))}
+                        aria-label="Kembali"
+                    >
+                        <CaretLeft className="h-5 w-5" />
+                    </Button>
+                )}
+                <h1 className={cn("text-[15px] font-semibold tracking-tight", isOwnProfile && "px-2 md:px-0")}>Profil</h1>
             </header>
 
             <div className="mx-auto max-w-2xl">

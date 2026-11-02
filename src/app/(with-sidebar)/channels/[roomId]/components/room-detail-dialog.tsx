@@ -552,7 +552,7 @@ export function RoomDetailDialog({
             </DialogDescription>
 
             {/* Quick actions, Telegram-style */}
-            <div className="mt-4 grid grid-flow-col auto-cols-fr gap-2">
+            <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(3.6rem,1fr))] gap-1.5 sm:gap-2">
               {onSearch && (
                 <QuickAction
                   icon={MagnifyingGlass}
@@ -604,7 +604,7 @@ export function RoomDetailDialog({
               />
               {!isDirect && canManage && <QuickAction icon={UserPlus} label="Undang" onClick={() => setShowInvite(true)} />}
               {canShareLink && <QuickAction icon={LinkSimple} label="Salin tautan" onClick={copyJoinLink} />}
-              {!isDirect && canManage && <QuickAction icon={Gear} label="Pengaturan" onClick={() => setTab("settings")} />}
+              {!isDirect && canManage && <QuickAction icon={Gear} label="Kelola" title="Pengaturan channel" onClick={() => setTab("settings")} />}
               {!isDirect && !isOwner && !isGeneral && leaveDialog}
             </div>
           </div>
@@ -981,14 +981,14 @@ const QuickAction = forwardRef<HTMLButtonElement, QuickActionProps>(function Qui
   ref,
 ) {
   const classes = cn(
-    "flex h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-lg border border-border bg-muted/30 px-2 text-xs font-medium transition-colors hover:bg-muted",
+    "flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-lg border border-border bg-muted/30 px-1 py-2 text-[11px] font-medium sm:text-xs transition-colors hover:bg-muted",
     tone === "danger" ? "text-destructive hover:bg-destructive/10" : "text-foreground",
     className,
   );
   const content = (
     <>
       <Icon className="h-[18px] w-[18px]" />
-      <span className="truncate max-w-full">{label}</span>
+      <span className="line-clamp-2 max-w-full text-center leading-tight">{label}</span>
     </>
   );
   if (href) {

@@ -59,6 +59,18 @@ $ MIGRATION_TEST_DATABASE_URL=postgres://postgres:password@localhost:5432/mydb n
 `npx tsx scripts/inspect-migration-state.ts` (read-only) shows which
 migrations a database has recorded and which of their effects exist.
 
+**Develop against a local database** instead of the one in `.env`. `db.ts`
+switches to node-postgres for local hosts, and `NEXT_DIST_DIR` lets this run
+next to another dev server. `db:reset` and `db:seed` refuse non-local hosts.
+
+```console
+$ docker compose up -d postgres
+$ export DATABASE_URL=postgres://postgres:password@localhost:5432/mydb
+$ MIGRATION_TEST_DATABASE_URL=$DATABASE_URL npm run verify:migrations   # migrate from scratch
+$ npm run db:seed                                                        # users dev / dev2, password123
+$ NEXT_DIST_DIR=.next-local DISCORD_WEBHOOK_URL= npx next dev -p 3100
+```
+
 ---
 
 ## What's inside

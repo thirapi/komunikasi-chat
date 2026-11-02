@@ -69,7 +69,7 @@ export function MuteMenu({ roomId }: { roomId: string }) {
           aria-label={muted ? "Notifikasi dibisukan" : "Bisukan notifikasi"}
           title={muted ? describeUntil(until) : "Bisukan notifikasi"}
           className={cn(
-            "h-8 w-8 rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground flex-shrink-0",
+            "h-10 w-10 md:h-8 md:w-8 rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground flex-shrink-0",
             muted && "text-foreground",
           )}
         >

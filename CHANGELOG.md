@@ -13,6 +13,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 #### Chat list menu, roles and moderation, better forwards
 
+- **Mobile pass** (checked with screenshots at 390×844): long-press on a
+  message opens a bottom sheet (quote, large reaction row, 48 px actions)
+  instead of the tiny floating toolbar, with a guard against the ghost click
+  of the releasing finger; header and composer buttons are 40 px on phones;
+  the member list button is hidden on small screens (members are in the
+  details); the details quick actions no longer cut their labels; search
+  hides keyboard hints on touch; someone else's profile has a back button.
+- **Local development**: `db.ts` uses node-postgres for a local database (the
+  Neon driver cannot reach plain Postgres) and `NEXT_DIST_DIR` allows a second
+  dev server; see the README.
 - **Right-click menus** (Telegram Web style; long-press on touch) on chats,
   messages and members. Messages get a reaction row plus reply, copy (or copy
   the selected text), copy link, copy message link, forward, save, pin, edit

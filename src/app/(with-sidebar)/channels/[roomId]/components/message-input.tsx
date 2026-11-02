@@ -561,7 +561,7 @@ export function MessageInput({
               <button
                 type="button"
                 onClick={voice.cancel}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                className="flex h-10 w-10 md:h-8 md:w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                 aria-label="Batalkan rekaman"
                 title="Batalkan"
               >
@@ -573,7 +573,7 @@ export function MessageInput({
               <Button
                 type="button"
                 onClick={() => void finishRecording()}
-                className="h-8 w-8 shrink-0 rounded-md bg-primary p-0 text-primary-foreground hover:bg-primary/90"
+                className="h-10 w-10 md:h-8 md:w-8 shrink-0 rounded-md bg-primary p-0 text-primary-foreground hover:bg-primary/90"
                 aria-label="Kirim pesan suara"
                 title="Kirim"
               >
@@ -591,7 +591,7 @@ export function MessageInput({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 mb-1 shrink-0 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted data-[state=open]:bg-muted data-[state=open]:text-foreground"
+                  className="h-10 w-10 md:h-8 md:w-8 mb-0.5 md:mb-1 shrink-0 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted data-[state=open]:bg-muted data-[state=open]:text-foreground"
                   aria-label="Lampirkan"
                   title="Lampirkan"
                 >
@@ -652,7 +652,7 @@ export function MessageInput({
               onEmojiSelect={(emoji) => {
                 setContent((prev) => prev + emoji);
               }}
-              triggerClassName="h-8 w-8 mb-1 shrink-0 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center justify-center"
+              triggerClassName="h-10 w-10 md:h-8 md:w-8 mb-0.5 md:mb-1 shrink-0 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center justify-center"
             />
 
             {!canSend && voice.supported ? (
@@ -660,7 +660,7 @@ export function MessageInput({
                 type="button"
                 variant="ghost"
                 onClick={() => void startRecording()}
-                className="h-8 w-8 mb-1 p-0 shrink-0 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
+                className="h-10 w-10 md:h-8 md:w-8 mb-0.5 md:mb-1 p-0 shrink-0 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
                 aria-label="Rekam pesan suara"
                 title="Rekam pesan suara"
               >
@@ -671,7 +671,7 @@ export function MessageInput({
               onClick={() => handleSend()}
               disabled={!canSend}
               className={cn(
-                "h-8 w-8 mb-1 p-0 shrink-0 rounded-md transition-colors",
+                "h-10 w-10 md:h-8 md:w-8 mb-0.5 md:mb-1 p-0 shrink-0 rounded-md transition-colors",
                 canSend
                   ? "bg-primary text-primary-foreground hover:bg-primary/90"
                   : "bg-transparent text-muted-foreground/50 shadow-none"
