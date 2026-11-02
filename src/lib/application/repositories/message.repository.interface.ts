@@ -14,9 +14,10 @@ export interface IMessageRepository {
     roomId: string,
     replyTo?: string,
     attachments?: { url: string; key: string; fileType: string; size?: number }[],
-    options?: { isForwarded?: boolean; poll?: NewPoll },
+    options?: { isForwarded?: boolean; forwardedFromUserId?: string; poll?: NewPoll },
   ): Promise<MessageWithUserDTO>;
-  getMessagesByRoomId(roomId: string, limit?: number, before?: Date, after?: Date): Promise<MessageWithUserDTO[]>;
+  /** With `viewerId`, messages that viewer hid ("delete for me") are left out. */
+  getMessagesByRoomId(roomId: string, limit?: number, before?: Date, after?: Date, viewerId?: string): Promise<MessageWithUserDTO[]>;
   getMessageById(messageId: string): Promise<MessageWithUserDTO | null>;
   /**
    * Messages of a room created or changed (edited, deleted, reactions) after
@@ -27,6 +28,7 @@ export interface IMessageRepository {
     roomId: string,
     since: Date,
     limit: number,
+    viewerId?: string,
   ): Promise<{ changed: MessageWithUserDTO[]; deletedIds: string[]; overflow: boolean }>;
   /**
    * Of the given attachment URLs, those still attached to some other message

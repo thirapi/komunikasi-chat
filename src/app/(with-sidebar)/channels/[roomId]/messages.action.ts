@@ -17,7 +17,7 @@ import { ServerResponse } from "@/lib/entities/models/response.model";
 import { getMessageController } from "@/lib/interface-adapters/controllers/messages/get-message.controller";
 import { syncRoomMessagesController } from "@/lib/interface-adapters/controllers/messages/sync-room-messages.controller";
 import { togglePinController } from "@/lib/interface-adapters/controllers/messages/toggle-pin.controller";
-import { sendMessageController, forwardMessageController, createPollController, votePollController } from "@/lib/interface-adapters/controllers/messages/send-message.controller";
+import { sendMessageController, forwardMessageController, createPollController, votePollController, hideMessageController } from "@/lib/interface-adapters/controllers/messages/send-message.controller";
 import {
   startTypingController,
   stopTypingController,
@@ -217,7 +217,7 @@ export const getMessage = async (roomId: string, limit?: number, before?: Date, 
   try {
     const viewerId = await requireReader();
     await assertCanReadRoom(roomId, viewerId);
-    const message = await getMessageController(roomId, Math.min(limit ?? 50, 100), before, after);
+    const message = await getMessageController(roomId, Math.min(limit ?? 50, 100), before, after, viewerId);
 
     return {
       status: "success",
@@ -248,7 +248,7 @@ export const syncRoomMessages = async (roomId: string, since?: Date | string | n
   try {
     const viewerId = await requireReader();
     await assertCanReadRoom(roomId, viewerId);
-    const sync = await syncRoomMessagesController(roomId, since ? new Date(since) : null);
+    const sync = await syncRoomMessagesController(roomId, since ? new Date(since) : null, viewerId);
     return { status: "success" as const, data: sync, error: null };
   } catch (err: any) {
     console.error("Action Error:", err);
@@ -257,6 +257,17 @@ export const syncRoomMessages = async (roomId: string, since?: Date | string | n
       data: null,
       error: { message: err.message || "Terjadi kesalahan internal", type: err.name },
     };
+  }
+};
+
+/** "Delete for me": hide a message from your own view only. */
+export const hideMessageAction = async (messageId: string) => {
+  try {
+    const actorId = await requireWriter();
+    return { status: "success" as const, data: await hideMessageController(actorId, messageId), error: null };
+  } catch (err: any) {
+    console.error("Action Error:", err);
+    return { status: "error" as const, data: null, error: { message: err.message || "Gagal menghapus pesan", type: err.name } };
   }
 };
 
@@ -287,10 +298,10 @@ export const votePollAction = async (pollId: string, optionIds: string[]) => {
 };
 
 /** Forward a message to up to 5 chats the user is in. */
-export const forwardMessageAction = async (messageId: string, targetRoomIds: string[]) => {
+export const forwardMessageAction = async (messageId: string, targetRoomIds: string[], comment?: string) => {
   try {
     const actorId = await requireWriter();
-    const result = await forwardMessageController(actorId, messageId, targetRoomIds);
+    const result = await forwardMessageController(actorId, messageId, targetRoomIds, comment);
     return { status: "success" as const, data: result, error: null };
   } catch (err: any) {
     console.error("Action Error:", err);

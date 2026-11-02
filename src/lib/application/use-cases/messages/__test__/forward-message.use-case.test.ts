@@ -1,13 +1,15 @@
 import { describe, it, expect, vi } from "vitest";
 import { ForwardMessageUseCase, MAX_FORWARD_TARGETS } from "../forward-message.use-case";
 
-function setup(opts: { content?: string; attachments?: any[]; member?: (roomId: string) => boolean } = {}) {
+function setup(opts: { content?: string; attachments?: any[]; member?: (roomId: string) => boolean; extra?: Record<string, unknown> } = {}) {
   const messages = {
     getMessageById: vi.fn().mockResolvedValue({
       id: "m1",
       roomId: "src",
+      userId: "author",
       content: opts.content ?? "halo",
       attachments: opts.attachments ?? [],
+      ...opts.extra,
     }),
   };
   const member = opts.member ?? (() => true);
@@ -42,5 +44,22 @@ describe("ForwardMessageUseCase", () => {
   it("requires membership of the source and every target", async () => {
     await expect(setup({ member: (r) => r !== "src" }).prepare("u1", "m1", ["a"])).rejects.toThrow();
     await expect(setup({ member: (r) => r !== "b" }).prepare("u1", "m1", ["a", "b"])).rejects.toThrow(/tujuan/);
+  });
+
+  it("credits the original author, also when a forward is forwarded again", async () => {
+    expect((await setup().prepare("u1", "m1", ["a"])).forwardedFromUserId).toBe("author");
+    const again = await setup({ extra: { forwardedFromUserId: "first" } }).prepare("u1", "m1", ["a"]);
+    expect(again.forwardedFromUserId).toBe("first");
+  });
+
+  it("re-posts a poll as a new poll", async () => {
+    const poll = { question: "Kapan?", allowMultiple: true, options: [{ text: "Senin", votes: [{}] }, { text: "Selasa", votes: [] }] };
+    const res = await setup({ content: "📊 Kapan?", extra: { poll } }).prepare("u1", "m1", ["a"]);
+    expect(res.poll).toEqual({ question: "Kapan?", options: ["Senin", "Selasa"], allowMultiple: true });
+  });
+
+  it("carries an optional comment, trimmed", async () => {
+    expect((await setup().prepare("u1", "m1", ["a"], "  lihat ini  ")).comment).toBe("lihat ini");
+    expect((await setup().prepare("u1", "m1", ["a"], "   ")).comment).toBeUndefined();
   });
 });

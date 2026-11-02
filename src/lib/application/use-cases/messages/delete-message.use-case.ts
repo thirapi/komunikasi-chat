@@ -3,6 +3,7 @@ import { IMessageRepository } from "../../repositories/message.repository.interf
 import { IRoomRepository } from "../../repositories/room.repository.interface";
 import { IPusherService } from "../../services/pusher.service.interface";
 import { FileStorageInterface } from "../../services/file-storage.interface";
+import { canModerate } from "@/lib/entities/models/room.model";
 
 export class DeleteMessageUseCase {
   constructor(
@@ -57,7 +58,12 @@ export class DeleteMessageUseCase {
     }
 
     if (message.userId !== userId) {
-      throw new Error("Anda tidak memiliki izin untuk menghapus pesan ini");
+      // Moderation: the owner and admins of a channel may delete anyone's
+      // message (never in DMs).
+      const access = await this.roomRepository.getRoomAccess(message.roomId, userId);
+      if (access.isDirect || !canModerate(access.role)) {
+        throw new Error("Anda tidak memiliki izin untuk menghapus pesan ini");
+      }
     }
 
     await this.roomRepository.fallbackLastReadMessageId(message.roomId, messageId, message.createdAt);

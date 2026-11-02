@@ -7,6 +7,8 @@ interface UnreadRoomState {
   hasMention: boolean;
   /** Unread messages from others (server count, then +1 per live message). */
   count: number;
+  /** Marked unread by the user: a dot, cleared when the chat is opened. */
+  manual?: boolean;
   /**
    * When this state was last decided on this device (ms). A server snapshot
    * older than that (a router.refresh rendered from data written before the
@@ -23,6 +25,8 @@ type ServerRoomUnread = {
   unreadCount?: number;
   mutedUntil?: Date | string | null;
   archivedAt?: Date | string | null;
+  chatPinnedAt?: Date | string | null;
+  markedUnread?: boolean;
   lastMessageTime?: Date | string | null;
 };
 
@@ -54,6 +58,11 @@ interface UnreadContextType {
   /** Rooms in the chat list's archive. */
   archivedRooms: Record<string, true>;
   setArchived: (roomId: string, archived: boolean) => void;
+  /** Chats pinned to the top: roomId -> pinned at (ms). */
+  pinnedChats: Record<string, number>;
+  setChatPinned: (roomId: string, pinnedAt: Date | string | null) => void;
+  /** "Mark as unread" (no count, a dot until opened). */
+  markAsUnreadManually: (roomId: string) => void;
   markAsRead: (roomId: string) => void;
   markAsUnread: (roomId: string, hasMention?: boolean) => void;
   initializeUnread: (rooms: ServerRoomUnread[]) => void;
@@ -156,6 +165,23 @@ export function UnreadProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const [pinnedChats, setPinnedChats] = useState<Record<string, number>>({});
+  const setChatPinned = useCallback((roomId: string, pinnedAt: Date | string | null) => {
+    setPinnedChats((prev) => {
+      const next = { ...prev };
+      if (pinnedAt) next[roomId] = new Date(pinnedAt).getTime();
+      else delete next[roomId];
+      return next;
+    });
+  }, []);
+
+  const markAsUnreadManually = useCallback((roomId: string) => {
+    setUnreadRooms((prev) => {
+      const current = prev[roomId] || { hasUnread: false, hasMention: false, count: 0 };
+      return { ...prev, [roomId]: { ...current, hasUnread: true, manual: true, at: Date.now() } };
+    });
+  }, []);
+
   const mutedRoomsRef = useRef(mutedRooms);
   mutedRoomsRef.current = mutedRooms;
   // Stable identity (reads a ref) so listeners bound once can call it.
@@ -182,6 +208,9 @@ export function UnreadProvider({ children }: { children: React.ReactNode }) {
   const initializeUnread = useCallback((rooms: ServerRoomUnread[]) => {
     const now = Date.now();
     setArchivedRooms(Object.fromEntries(rooms.filter((r) => r.archivedAt).map((r) => [r.id, true as const])));
+    setPinnedChats(
+      Object.fromEntries(rooms.filter((r) => r.chatPinnedAt).map((r) => [r.id, new Date(r.chatPinnedAt!).getTime()])),
+    );
     setMutedRooms(
       Object.fromEntries(
         rooms
@@ -200,9 +229,12 @@ export function UnreadProvider({ children }: { children: React.ReactNode }) {
           local?.at !== undefined && serverLatest <= local.at
             ? local
             : {
-                hasUnread: room.hasUnread,
+                hasUnread: room.hasUnread || !!room.markedUnread,
                 hasMention: room.hasMention,
                 count: room.hasUnread ? Math.max(1, room.unreadCount ?? 1) : 0,
+                // Kept even when there is real unread too, so opening the chat
+                // also clears the flag on the server.
+                manual: !!room.markedUnread,
               };
       }
       return next;
@@ -234,8 +266,8 @@ export function UnreadProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ unreadRooms, roomActivity, recordActivity, clearActivity, roomTyping, setRoomTyping, mutedRooms, isMuted, setMuted, archivedRooms, setArchived, markAsRead, markAsUnread, initializeUnread }),
-    [unreadRooms, roomActivity, recordActivity, clearActivity, roomTyping, setRoomTyping, mutedRooms, isMuted, setMuted, archivedRooms, setArchived, markAsRead, markAsUnread, initializeUnread],
+    () => ({ unreadRooms, roomActivity, recordActivity, clearActivity, roomTyping, setRoomTyping, mutedRooms, isMuted, setMuted, archivedRooms, setArchived, pinnedChats, setChatPinned, markAsUnreadManually, markAsRead, markAsUnread, initializeUnread }),
+    [unreadRooms, roomActivity, recordActivity, clearActivity, roomTyping, setRoomTyping, mutedRooms, isMuted, setMuted, archivedRooms, setArchived, pinnedChats, setChatPinned, markAsUnreadManually, markAsRead, markAsUnread, initializeUnread],
   );
 
   return (

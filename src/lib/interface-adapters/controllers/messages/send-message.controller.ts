@@ -16,6 +16,8 @@ import { UserBlockRepository } from "@/lib/infrastructure/repositories/user-bloc
 import { ForwardMessageUseCase } from "@/lib/application/use-cases/messages/forward-message.use-case";
 import { VotePollUseCase, preparePoll, pollMessageContent } from "@/lib/application/use-cases/messages/polls.use-case";
 import { PollRepository } from "@/lib/infrastructure/repositories/poll.repository";
+import { HiddenMessageRepository } from "@/lib/infrastructure/repositories/hidden-message.repository";
+import { HideMessageUseCase } from "@/lib/application/use-cases/messages/hide-message.use-case";
 
 const messageRepository = new MessageRepository(db);
 const roomRepository = new RoomRepository(db)
@@ -88,16 +90,35 @@ export const sendMessageController = async (
 const forwardMessageUseCase = new ForwardMessageUseCase(messageRepository, roomRepository, new UserRepository(db));
 
 /** Forward a message to up to 5 chats: validate, then a normal send per target. */
-export const forwardMessageController = async (userId: string, messageId: string, targetRoomIds: string[]) => {
-    const parsed = z.object({ messageId: z.string().min(1), targetRoomIds: z.array(z.string().min(1)).max(20) })
-        .safeParse({ messageId, targetRoomIds });
+export const forwardMessageController = async (
+    userId: string,
+    messageId: string,
+    targetRoomIds: string[],
+    comment?: string,
+) => {
+    const parsed = z.object({
+        messageId: z.string().min(1),
+        targetRoomIds: z.array(z.string().min(1)).max(20),
+        comment: z.string().max(4000).optional(),
+    }).safeParse({ messageId, targetRoomIds, comment });
     if (!parsed.success) throw new InputParsedError("Invalid input: ", parsed.error.flatten().fieldErrors);
 
-    const payload = await forwardMessageUseCase.prepare(userId, parsed.data.messageId, parsed.data.targetRoomIds);
+    const payload = await forwardMessageUseCase.prepare(
+        userId,
+        parsed.data.messageId,
+        parsed.data.targetRoomIds,
+        parsed.data.comment,
+    );
     const results = await Promise.allSettled(
-        payload.targetRoomIds.map((roomId) =>
-            sendMessageUseCase.execute(userId, payload.content, roomId, undefined, payload.attachments, undefined, { isForwarded: true }),
-        ),
+        payload.targetRoomIds.map(async (roomId) => {
+            await sendMessageUseCase.execute(userId, payload.content, roomId, undefined, payload.attachments, undefined, {
+                isForwarded: true,
+                forwardedFromUserId: payload.forwardedFromUserId,
+                poll: payload.poll,
+            });
+            // The note goes right after the forward, as its own message.
+            if (payload.comment) await sendMessageUseCase.execute(userId, payload.comment, roomId);
+        }),
     );
     return {
         sent: payload.targetRoomIds.filter((_, i) => results[i].status === "fulfilled"),
@@ -121,4 +142,13 @@ export const votePollController = async (userId: string, pollId: string, optionI
     const parsed = z.object({ pollId: z.string().min(1), optionIds: z.array(z.string().min(1)).max(10) }).safeParse({ pollId, optionIds });
     if (!parsed.success) throw new InputParsedError("Invalid input: ", parsed.error.flatten().fieldErrors);
     return votePollUseCase.execute(userId, parsed.data.pollId, parsed.data.optionIds);
+};
+
+const hideMessageUseCase = new HideMessageUseCase(new HiddenMessageRepository(db), messageRepository, roomRepository, pusherService);
+
+/** "Delete for me". */
+export const hideMessageController = async (userId: string, messageId: string) => {
+    const parsed = z.string().min(1).safeParse(messageId);
+    if (!parsed.success) throw new InputParsedError("Invalid input: ", {});
+    return hideMessageUseCase.execute(userId, parsed.data);
 };

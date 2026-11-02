@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
-import { rooms, roomParticipants, messages, users, userRoles, roles as rolesTable, polls, pollOptions, pollVotes, savedMessages, messageReactions, attachments } from "@/lib/infrastructure/drizzle/schema";
+import { rooms, roomParticipants, messages, users, userRoles, roles as rolesTable, polls, pollOptions, pollVotes, savedMessages, messageReactions, attachments, hiddenMessages } from "@/lib/infrastructure/drizzle/schema";
 import { eq, and, asc, desc, not, sql, exists, inArray } from "drizzle-orm";import { IRoomRepository } from "@/lib/application/repositories/room.repository.interface";
-import { RoomWithParticipantsDTO, SidebarRoomRow } from "@/lib/entities/models/room.model";
+import { RoomWithParticipantsDTO, SidebarRoomRow, RoomRole } from "@/lib/entities/models/room.model";
 import { createId } from "@paralleldrive/cuid2";
 import { avatarService } from "@/lib/infrastructure/services/avatar.service";
 
@@ -68,6 +68,7 @@ export class RoomRepository implements IRoomRepository {
       participants: room.participants.map((p) => ({
         lastReadMessageId: p.lastReadMessageId,
         lastReadAt: p.lastReadAt,
+        role: (p.user.id === room.ownerId ? "owner" : p.role === "admin" ? "admin" : "member") as RoomRole,
         user: {
           id: p.user.id,
           username: p.user.username,
@@ -113,6 +114,8 @@ export class RoomRepository implements IRoomRepository {
         me."lastReadAt"                 AS "lastReadAt",
         me."mutedUntil"                 AS "mutedUntil",
         me."archivedAt"                 AS "archivedAt",
+        me."pinnedAt"                   AS "chatPinnedAt",
+        me."markedUnread"               AS "markedUnread",
         lm."id"                         AS "lastMessageId",
         lm."content"                    AS "lastMessageContent",
         lm."userId"                     AS "lastMessageUserId",
@@ -376,6 +379,35 @@ export class RoomRepository implements IRoomRepository {
     return others;
   }
 
+  async setParticipantRole(roomId: string, userId: string, role: "admin" | "member"): Promise<void> {
+    await this.client
+      .update(roomParticipants)
+      .set({ role })
+      .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)));
+  }
+
+  async setChatPinned(userId: string, roomId: string, pinnedAt: Date | null): Promise<void> {
+    await this.client
+      .update(roomParticipants)
+      .set({ pinnedAt })
+      .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)));
+  }
+
+  async countPinnedChats(userId: string): Promise<number> {
+    const rows = await this.client
+      .select({ id: roomParticipants.id })
+      .from(roomParticipants)
+      .where(and(eq(roomParticipants.userId, userId), sql`${roomParticipants.pinnedAt} IS NOT NULL`));
+    return rows.length;
+  }
+
+  async setMarkedUnread(userId: string, roomId: string, markedUnread: boolean): Promise<void> {
+    await this.client
+      .update(roomParticipants)
+      .set({ markedUnread })
+      .where(and(eq(roomParticipants.roomId, roomId), eq(roomParticipants.userId, userId)));
+  }
+
   async setArchived(userIds: string[], roomId: string, archivedAt: Date | null): Promise<void> {
     if (userIds.length === 0) return;
     await this.client
@@ -398,13 +430,14 @@ export class RoomRepository implements IRoomRepository {
   async getRoomAccess(
     roomId: string,
     userId: string,
-  ): Promise<{ exists: boolean; isMember: boolean; isPublic: boolean; isDirect: boolean; ownerId: string | null }> {
+  ): Promise<{ exists: boolean; isMember: boolean; isPublic: boolean; isDirect: boolean; ownerId: string | null; role: RoomRole | null }> {
     const [row] = await this.client
       .select({
         isPublic: rooms.isPublic,
         isDirect: rooms.isDirect,
         ownerId: rooms.ownerId,
         memberId: roomParticipants.id,
+        memberRole: roomParticipants.role,
       })
       .from(rooms)
       .leftJoin(
@@ -414,13 +447,14 @@ export class RoomRepository implements IRoomRepository {
       .where(eq(rooms.id, roomId))
       .limit(1);
 
-    if (!row) return { exists: false, isMember: false, isPublic: false, isDirect: false, ownerId: null };
+    if (!row) return { exists: false, isMember: false, isPublic: false, isDirect: false, ownerId: null, role: null };
     return {
       exists: true,
       isMember: !!row.memberId,
       isPublic: row.isPublic,
       isDirect: row.isDirect,
       ownerId: row.ownerId,
+      role: !row.memberId ? null : row.ownerId === userId ? "owner" : row.memberRole === "admin" ? "admin" : "member",
     };
   }
 
@@ -628,6 +662,7 @@ export class RoomRepository implements IRoomRepository {
           await tx.delete(polls).where(inArray(polls.id, roomPollIds));
         }
         await tx.delete(savedMessages).where(inArray(savedMessages.messageId, roomMessageIds));
+        await tx.delete(hiddenMessages).where(inArray(hiddenMessages.messageId, roomMessageIds));
         await tx.delete(messageReactions).where(inArray(messageReactions.messageId, roomMessageIds));
         await tx.delete(attachments).where(inArray(attachments.messageId, roomMessageIds));
         // Replies point at messages of the same room.

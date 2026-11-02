@@ -1,7 +1,7 @@
 import { SidebarRoomDTO } from "@/lib/entities/models/room.model";
 import { IRoomRepository } from "../../repositories/room.repository.interface";
 
-const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"];
+import { attachmentLabel } from "@/lib/chat/message-preview";
 
 const MENTION_TOKEN = /<@([a-zA-Z0-9_-]+)>/g;
 
@@ -58,11 +58,10 @@ export class GetSidebarDataUseCase {
         !row.lastMessageContent &&
         row.lastMessageAttachmentUrl
       ) {
-        const url = row.lastMessageAttachmentUrl.toLowerCase();
-        const isImage =
-          IMAGE_EXTENSIONS.some((ext) => url.includes(ext)) ||
-          row.lastMessageAttachmentType?.startsWith("image/");
-        lastMessageDisplay = isImage ? "📷 Foto" : "📁 File";
+        lastMessageDisplay = attachmentLabel(
+          row.lastMessageAttachmentUrl.toLowerCase(),
+          row.lastMessageAttachmentType,
+        );
       }
 
       if (row.isDirect) {
@@ -77,6 +76,8 @@ export class GetSidebarDataUseCase {
           unreadCount,
           mutedUntil: row.mutedUntil ? new Date(row.mutedUntil) : null,
           archivedAt: row.archivedAt ? new Date(row.archivedAt) : null,
+          chatPinnedAt: row.chatPinnedAt ? new Date(row.chatPinnedAt) : null,
+          markedUnread: Boolean(row.markedUnread),
           type: "direct" as const,
           lastMessage: lastMessageDisplay,
           lastMessageTime: row.lastMessageCreatedAt ?? undefined,
@@ -93,6 +94,8 @@ export class GetSidebarDataUseCase {
         unreadCount,
         mutedUntil: row.mutedUntil ? new Date(row.mutedUntil) : null,
         archivedAt: row.archivedAt ? new Date(row.archivedAt) : null,
+        chatPinnedAt: row.chatPinnedAt ? new Date(row.chatPinnedAt) : null,
+        markedUnread: Boolean(row.markedUnread),
         type: "channel" as const,
         lastMessage: lastMessageDisplay,
         lastMessageTime: row.lastMessageCreatedAt ?? undefined,

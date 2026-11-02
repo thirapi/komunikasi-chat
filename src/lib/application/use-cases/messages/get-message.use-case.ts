@@ -4,8 +4,8 @@ import { IMessageRepository } from "../../repositories/message.repository.interf
 export class GetMessageUseCase {
   constructor(private messageRepository: IMessageRepository) { }
 
-  async execute(roomId: string, limit?: number, before?: Date, after?: Date): Promise<MessageWithUserDTO[]> {
-    const message = await this.messageRepository.getMessagesByRoomId(roomId, limit, before, after);
+  async execute(roomId: string, limit?: number, before?: Date, after?: Date, viewerId?: string): Promise<MessageWithUserDTO[]> {
+    const message = await this.messageRepository.getMessagesByRoomId(roomId, limit, before, after, viewerId);
 
     if (!message) {
       throw new Error("Message not found");

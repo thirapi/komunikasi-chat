@@ -1,5 +1,6 @@
 import { roomChannel } from "@/lib/pusher/channels";
 import { PinnedMessageDTO } from "@/lib/entities/models/message.model";
+import { canModerate } from "@/lib/entities/models/room.model";
 import { IMessageRepository } from "../../repositories/message.repository.interface";
 import { IRoomRepository } from "../../repositories/room.repository.interface";
 import { IPusherService } from "../../services/pusher.service.interface";
@@ -36,8 +37,8 @@ export class TogglePinUseCase {
 
     const access = await this.roomRepository.getRoomAccess(message.roomId, userId);
     if (!access.isMember) throw new PinError("Kamu bukan anggota room ini");
-    const allowed = access.isDirect || access.ownerId === userId || opts.isAdmin;
-    if (!allowed) throw new PinError("Hanya pemilik channel atau admin yang bisa menyematkan pesan");
+    const allowed = access.isDirect || access.ownerId === userId || canModerate(access.role) || opts.isAdmin;
+    if (!allowed) throw new PinError("Hanya pemilik atau admin channel yang bisa menyematkan pesan");
 
     const pinned = !message.pinnedAt;
     if (pinned) {

@@ -217,6 +217,8 @@ export function MessageItemComponent({
   onForward,
   isSaved = false,
   onToggleSave,
+  onHide,
+  canDeleteForEveryone = false,
 }: {
   message: MessageWithUserDTO;
   onlineUserIds: string[];
@@ -242,6 +244,10 @@ export function MessageItemComponent({
   onForward?: (messageId: string) => void;
   isSaved?: boolean;
   onToggleSave?: (messageId: string) => void;
+  /** "Delete for me". */
+  onHide?: (messageId: string) => void;
+  /** Own message, or a channel admin moderating. */
+  canDeleteForEveryone?: boolean;
 }) {
   const router = useRouter();
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -955,8 +961,12 @@ const getFileName = (url: string) => {
 
         {message.isForwarded && !isEditing && (
           <div className="flex items-center gap-1 text-[11px] italic text-muted-foreground">
-            <ShareFat className="h-3 w-3" />
-            Diteruskan
+            <ShareFat className="h-3 w-3 shrink-0" />
+            <span className="truncate">
+              {message.forwardedFrom
+                ? <>Diteruskan dari <span className="font-medium not-italic">{message.forwardedFrom.name || message.forwardedFrom.username}</span></>
+                : "Diteruskan"}
+            </span>
           </div>
         )}
 
@@ -1230,7 +1240,7 @@ const getFileName = (url: string) => {
             )}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center bg-popover border border-border rounded-md shadow-sm p-0.5">
+            <div className="flex max-w-[calc(100vw-1.5rem)] items-center overflow-x-auto bg-popover border border-border rounded-md shadow-sm p-0.5 [scrollbar-width:none]">
               {QUICK_REACTIONS.map((emoji) => (
                 <button
                   key={emoji}
@@ -1353,42 +1363,68 @@ const getFileName = (url: string) => {
                   </Tooltip>
                   )}
 
-                  <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <AlertDialogTrigger asChild>
-                          <button
-                            type="button"
-                            disabled={isDeleting}
-                            className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
-                            aria-label="Hapus"
-                          >
-                            <Trash className="w-4 h-4" />
-                          </button>
-                        </AlertDialogTrigger>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="text-xs py-1 px-2">Hapus</TooltipContent>
-                    </Tooltip>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Hapus pesan ini?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Pesan akan dihapus untuk semua orang dan tidak bisa dikembalikan.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Batal</AlertDialogCancel>
+                </>
+              )}
+
+              {(onHide || canDeleteForEveryone) && (
+                <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <AlertDialogTrigger asChild>
+                        <button
+                          type="button"
+                          disabled={isDeleting}
+                          className="h-7 w-7 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                          aria-label="Hapus"
+                        >
+                          <Trash className="w-4 h-4" />
+                        </button>
+                      </AlertDialogTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs py-1 px-2">Hapus</TooltipContent>
+                  </Tooltip>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Hapus pesan ini?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {canDeleteForEveryone
+                          ? message.userId === currentUserId
+                            ? "Hapus hanya dari tampilanmu, atau untuk semua orang di chat ini."
+                            : "Sebagai admin, kamu bisa menghapus pesan ini untuk semua orang."
+                          : "Pesan hanya hilang dari tampilanmu. Orang lain tetap melihatnya."}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="gap-2 sm:gap-2">
+                      <AlertDialogCancel>Batal</AlertDialogCancel>
+                      {onHide && (
+                        <AlertDialogAction
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setDeleteConfirmOpen(false);
+                            onHide(message.id);
+                          }}
+                          disabled={isDeleting}
+                          className={cn(
+                            canDeleteForEveryone
+                              ? "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                              : "bg-destructive text-white hover:bg-destructive/90",
+                          )}
+                        >
+                          Hapus untuk saya
+                        </AlertDialogAction>
+                      )}
+                      {canDeleteForEveryone && (
                         <AlertDialogAction
                           onClick={(e) => { e.preventDefault(); handleDelete(); }}
                           disabled={isDeleting}
                           className="bg-destructive text-white hover:bg-destructive/90"
                         >
-                          {isDeleting ? "Menghapus…" : "Hapus"}
+                          {isDeleting ? "Menghapus…" : "Hapus untuk semua"}
                         </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </>
+                      )}
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               )}
             </div>
           </div>

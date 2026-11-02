@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, forwardRef } from "react";
-import { Prohibit, Archive } from "@phosphor-icons/react/dist/ssr";
+import { Prohibit, Archive, ShieldCheck } from "@phosphor-icons/react/dist/ssr";
 import { useUnread } from "@/components/unread-provider";
 import type { BlockStatus } from "@/lib/entities/models/block.model";
 import {
@@ -35,7 +35,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { RoomWithParticipantsDTO } from "@/lib/entities/models/room.model";
-import { updateChannel, deleteChannel, removeParticipant, setRoomArchivedAction } from "../room.action";
+import { updateChannel, deleteChannel, removeParticipant, setRoomArchivedAction, setParticipantRoleAction } from "../room.action";
 import { uploadFileResult } from "@/lib/chat/upload";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -95,6 +95,27 @@ export function RoomDetailDialog({
   const router = useRouter();
 
   const isOwner = currentUserId === roomData.ownerId;
+  // Admins manage the channel too (invite, members, info); only the owner
+  // deletes it and appoints admins (see SetParticipantRoleUseCase).
+  const myRole = roomData.participants.find((p) => p.user.id === currentUserId)?.role;
+  const canManage = isOwner || myRole === "admin";
+  const [roleOverrides, setRoleOverrides] = useState<Record<string, "admin" | "member">>({});
+  const roleOf = (p: (typeof roomData.participants)[number]) =>
+    p.user.id === roomData.ownerId ? "owner" : roleOverrides[p.user.id] ?? (p.role === "admin" ? "admin" : "member");
+  const changeRole = async (userId: string, role: "admin" | "member") => {
+    setRoleOverrides((prev) => ({ ...prev, [userId]: role }));
+    const res = await setParticipantRoleAction(roomData.id, userId, role);
+    if (res.status !== "success") {
+      setRoleOverrides((prev) => {
+        const next = { ...prev };
+        delete next[userId];
+        return next;
+      });
+      toast.error(res.error?.message || "Gagal mengubah peran");
+      return;
+    }
+    toast(role === "admin" ? "Dijadikan admin" : "Admin dicabut", { duration: 2000 });
+  };
   const isGeneral = roomData.id === "general-channel";
   const isDirect = roomData.isDirect;
 
@@ -135,7 +156,7 @@ export function RoomDetailDialog({
   const currentAvatarName = isDirect ? otherUser?.username || "" : roomData.name;
 
   const handleAvatarClick = () => {
-    if (isOwner && !isDirect) {
+    if (canManage && !isDirect) {
       fileInputRef.current?.click();
     }
   };
@@ -291,7 +312,7 @@ export function RoomDetailDialog({
   const isOtherOnline = !!otherUser && onlineUserIds.includes(otherUser.id);
   const onlineCount = roomData.participants.filter((p) => onlineUserIds.includes(p.user.id)).length;
   const joinLink = typeof window !== "undefined" ? `${window.location.origin}/join/${roomData.id}` : "";
-  const canShareLink = !isDirect && (isPublic || isOwner);
+  const canShareLink = !isDirect && (isPublic || canManage);
 
   const displayBanner = (isDirect ? otherUser?.banner : banner) || "";
   const isDisplayBannerUrl = displayBanner.startsWith("http") || displayBanner.startsWith("/");
@@ -367,7 +388,22 @@ export function RoomDetailDialog({
             <Crown weight="fill" className="h-3 w-3" /> Pemilik
           </span>
         )}
-        {isOwner && !isParticipantOwner && (
+        {roleOf(participant) === "admin" && (
+          <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium bg-primary/10 text-primary shrink-0">
+            <ShieldCheck weight="fill" className="h-3 w-3" /> Admin
+          </span>
+        )}
+        {isOwner && !isParticipantOwner && !isDirect && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+            onClick={() => changeRole(participant.user.id, roleOf(participant) === "admin" ? "member" : "admin")}
+          >
+            {roleOf(participant) === "admin" ? "Cabut admin" : "Jadikan admin"}
+          </Button>
+        )}
+        {canManage && !isParticipantOwner && !isCurrentUser && !(myRole === "admin" && roleOf(participant) === "admin") && (
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button
@@ -433,7 +469,7 @@ export function RoomDetailDialog({
   const tabs = [
     { v: "overview", l: "Tentang" },
     ...(isDirect ? [{ v: "media", l: "Media" }] : [{ v: "members", l: "Anggota", n: roomData.participants.length }]),
-    ...(isOwner && !isDirect ? [{ v: "settings", l: "Pengaturan" }] : []),
+    ...(canManage && !isDirect ? [{ v: "settings", l: "Pengaturan" }] : []),
   ] as { v: string; l: string; n?: number }[];
 
   return (
@@ -566,9 +602,9 @@ export function RoomDetailDialog({
                   });
                 }}
               />
-              {!isDirect && isOwner && <QuickAction icon={UserPlus} label="Undang" onClick={() => setShowInvite(true)} />}
+              {!isDirect && canManage && <QuickAction icon={UserPlus} label="Undang" onClick={() => setShowInvite(true)} />}
               {canShareLink && <QuickAction icon={LinkSimple} label="Salin tautan" onClick={copyJoinLink} />}
-              {!isDirect && isOwner && <QuickAction icon={Gear} label="Pengaturan" onClick={() => setTab("settings")} />}
+              {!isDirect && canManage && <QuickAction icon={Gear} label="Pengaturan" onClick={() => setTab("settings")} />}
               {!isDirect && !isOwner && !isGeneral && leaveDialog}
             </div>
           </div>
@@ -615,7 +651,7 @@ export function RoomDetailDialog({
                       ) : (
                         <span className="text-muted-foreground">
                           Belum ada deskripsi.
-                          {isOwner && (
+                          {canManage && (
                             <button type="button" onClick={() => setTab("settings")} className="ml-1 text-primary hover:underline">
                               Tambahkan
                             </button>
@@ -691,8 +727,8 @@ export function RoomDetailDialog({
                 </TabsContent>
               )}
 
-              {/* Pengaturan (owner) */}
-              {isOwner && !isDirect && (
+              {/* Pengaturan (owner and admins) */}
+              {canManage && !isDirect && (
                 <TabsContent value="settings" className="mt-0 space-y-7">
                   <Section title="Tampilan" description="Banner dan foto yang dilihat semua anggota.">
                     {/* Banner editor with a live preview */}
@@ -816,7 +852,7 @@ export function RoomDetailDialog({
                     </label>
                   </Section>
 
-                  {!isGeneral && (
+                  {!isGeneral && isOwner && (
                     <Section title="Zona bahaya">
                       <div className="flex items-center justify-between gap-4 rounded-lg border border-destructive/30 px-3.5 py-3">
                         <span>
@@ -856,7 +892,7 @@ export function RoomDetailDialog({
         <input type="file" ref={bannerInputRef} onChange={handleBannerUpload} className="hidden" accept="image/*" />
         <input type="file" ref={fileInputRef} onChange={handleAvatarChange} accept="image/*" className="hidden" />
 
-        {isOwner && !isDirect && isDirty && (
+        {canManage && !isDirect && isDirty && (
           <div className="shrink-0 flex items-center justify-between gap-3 border-t border-border bg-background px-5 py-3 animate-in fade-in slide-in-from-bottom-1 duration-150">
             <span className="text-xs text-muted-foreground">Ada perubahan yang belum disimpan</span>
             <div className="flex items-center gap-1.5">
@@ -878,7 +914,7 @@ export function RoomDetailDialog({
       />
     </Dialog>
 
-    {!isDirect && isOwner && (
+    {!isDirect && canManage && (
       <InviteMemberDialog
         open={showInvite}
         onOpenChange={setShowInvite}

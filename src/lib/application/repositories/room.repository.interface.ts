@@ -1,4 +1,5 @@
 import { RoomWithParticipantsDTO, SidebarRoomRow } from "@/lib/entities/models/room.model";
+import type { RoomRole } from "@/lib/entities/models/room.model";
 
 export interface IRoomRepository {
   getRoomById(roomId: string): Promise<RoomWithParticipantsDTO | null>;
@@ -21,6 +22,9 @@ export interface IRoomRepository {
   ): Promise<{ userId: string; mutedUntil?: Date | null; archivedAt?: Date | null }[]>;
   setMutedUntil(userId: string, roomId: string, mutedUntil: Date | null): Promise<void>;
   setArchived(userIds: string[], roomId: string, archivedAt: Date | null): Promise<void>;
+  setChatPinned(userId: string, roomId: string, pinnedAt: Date | null): Promise<void>;
+  countPinnedChats(userId: string): Promise<number>;
+  setMarkedUnread(userId: string, roomId: string, markedUnread: boolean): Promise<void>;
   getParticipantIds(roomId: string): Promise<string[]>;
   createRoom(
     name: string,
@@ -40,5 +44,6 @@ export interface IRoomRepository {
   getRoomAccess(
     roomId: string,
     userId: string,
-  ): Promise<{ exists: boolean; isMember: boolean; isPublic: boolean; isDirect: boolean; ownerId: string | null }>;
+  ): Promise<{ exists: boolean; isMember: boolean; isPublic: boolean; isDirect: boolean; ownerId: string | null; role?: RoomRole | null }>;
+  setParticipantRole(roomId: string, userId: string, role: "admin" | "member"): Promise<void>;
 }

@@ -25,6 +25,10 @@ export interface SidebarRoomDTO {
   /** Muted until this time, or null. */
   mutedUntil: Date | null;
   archivedAt: Date | null;
+  /** Pinned to the top of the chat list. */
+  chatPinnedAt: Date | null;
+  /** Marked as unread by the user (no count, just a dot). */
+  markedUnread: boolean;
   type: "channel" | "direct";
   userId?: string;
   lastMessage?: string;
@@ -44,6 +48,8 @@ export interface SidebarRoomRow {
   lastReadAt: Date | null;
   mutedUntil: Date | null;
   archivedAt: Date | null;
+  chatPinnedAt: Date | null;
+  markedUnread: boolean;
   lastMessageId: string | null;
   lastMessageContent: string | null;
   lastMessageUserId: string | null;
@@ -62,6 +68,8 @@ export interface RoomWithParticipantsDTO extends RoomRecord {  createdAt: Date;
   participants: {
     lastReadMessageId: string | null;
     lastReadAt: Date | null;
+    /** owner / admin / member (only set by getRoomById). */
+    role?: RoomRole;
     user: {
       id: string;
       username: string;
@@ -98,3 +106,12 @@ export interface RoomWithParticipantsDTO extends RoomRecord {  createdAt: Date;
 
 /** Telegram-style rough last seen, used when the exact time is private. */
 export type LastSeenLabel = "recently" | "week" | "month" | "long";
+
+export type RoomRole = "owner" | "admin" | "member";
+
+/**
+ * What a role may do in a channel, the middle ground of WhatsApp, Telegram and
+ * Teams: admins invite, remove members, edit info, pin and delete others'
+ * messages; only the owner deletes the channel and appoints admins.
+ */
+export const canModerate = (role: RoomRole | null | undefined) => role === "owner" || role === "admin";

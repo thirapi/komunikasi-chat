@@ -1,4 +1,6 @@
 import { IRoomRepository } from "../../repositories/room.repository.interface";
+import { canModerate } from "@/lib/entities/models/room.model";
+import { roleIn } from "./room-roles";
 
 export class UpdateRoomUseCase {
   constructor(private roomRepository: IRoomRepository) {}
@@ -11,8 +13,8 @@ export class UpdateRoomUseCase {
     const room = await this.roomRepository.getRoomById(roomId);
     if (!room) throw new Error("Channel tidak ditemukan");
 
-    if (room.ownerId !== requesterId) {
-      throw new Error("Hanya pemilik channel yang dapat mengubah pengaturan ini");
+    if (!canModerate(roleIn(room, requesterId))) {
+      throw new Error("Hanya pemilik atau admin channel yang dapat mengubah pengaturan ini");
     }
 
     if (!data.name && data.description === undefined && data.isPublic === undefined && !data.avatar && !data.banner) {

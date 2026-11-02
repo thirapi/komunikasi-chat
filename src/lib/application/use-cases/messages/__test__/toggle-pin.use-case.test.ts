@@ -31,7 +31,7 @@ describe("TogglePinUseCase", () => {
     await expect(setup({ ownerId: "u1" }).useCase.execute("u1", "m1", { isAdmin: false })).resolves.toBeTruthy();
     await expect(setup({ ownerId: "x" }).useCase.execute("u1", "m1", { isAdmin: true })).resolves.toBeTruthy();
     const member = setup({ ownerId: "x" });
-    await expect(member.useCase.execute("u1", "m1", { isAdmin: false })).rejects.toThrow(/pemilik channel/);
+    await expect(member.useCase.execute("u1", "m1", { isAdmin: false })).rejects.toThrow(/pemilik atau admin/);
     expect(member.messages.setPinned).not.toHaveBeenCalled();
   });
 

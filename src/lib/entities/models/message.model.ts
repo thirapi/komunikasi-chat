@@ -11,6 +11,9 @@ export interface MessageRecord {
   pinnedAt?: Date | null;
   editedAt?: Date | null;
   isForwarded?: boolean;
+  forwardedFromUserId?: string | null;
+  /** Original author of a forwarded message. */
+  forwardedFrom?: { username: string; name: string | null } | null;
   poll?: PollDTO | null;
   pinnedBy?: string | null;
   createdAt: Date;

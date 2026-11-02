@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
-import { messages, attachments as attachmentsTable, roomParticipants, polls, pollOptions } from "@/lib/infrastructure/drizzle/schema";
-import { eq, ne, asc, desc, lt, gt, and, ilike, or, like, inArray, isNotNull } from "drizzle-orm";
+import { messages, attachments as attachmentsTable, roomParticipants, polls, pollOptions, hiddenMessages } from "@/lib/infrastructure/drizzle/schema";
+import { eq, ne, asc, desc, lt, gt, and, ilike, or, like, inArray, isNotNull, notExists, sql } from "drizzle-orm";
 import { IMessageRepository, NewPoll } from "@/lib/application/repositories/message.repository.interface";
 import {
   MessageWithUserDTO,
@@ -35,7 +35,7 @@ export class MessageRepository implements IMessageRepository {
     roomId: string,
     replyTo?: string,
     attachments?: { url: string; key: string; fileType: string; size?: number }[],
-    options?: { isForwarded?: boolean; poll?: NewPoll }
+    options?: { isForwarded?: boolean; forwardedFromUserId?: string; poll?: NewPoll }
   ): Promise<MessageWithUserDTO> {
     const id = createId();
 
@@ -47,6 +47,7 @@ export class MessageRepository implements IMessageRepository {
         roomId,
         replyTo,
         isForwarded: options?.isForwarded ?? false,
+        forwardedFromUserId: options?.forwardedFromUserId ?? null,
       });
 
       // Created with its message, so the single new-message broadcast
@@ -102,6 +103,7 @@ export class MessageRepository implements IMessageRepository {
           },
           attachments: true,
           poll: POLL_WITH,
+          forwardedFrom: { columns: { username: true, name: true } },
           reactions: {
             with: {
               user: {
@@ -123,11 +125,13 @@ export class MessageRepository implements IMessageRepository {
     roomId: string,
     since: Date,
     limit: number,
+    viewerId?: string,
   ): Promise<{ changed: MessageWithUserDTO[]; deletedIds: string[]; overflow: boolean }> {
     const rows = await this.client.query.messages.findMany({
       where: and(
         eq(messages.roomId, roomId),
         or(gt(messages.createdAt, since), gt(messages.updatedAt, since)),
+        ...(viewerId ? [this.notHiddenBy(viewerId)] : []),
       ),
       orderBy: [desc(messages.createdAt)],
       limit: limit + 1,
@@ -138,6 +142,7 @@ export class MessageRepository implements IMessageRepository {
         },
         attachments: true,
         poll: POLL_WITH,
+        forwardedFrom: { columns: { username: true, name: true } },
         reactions: {
           with: { user: { columns: { username: true, name: true } } },
         },
@@ -201,8 +206,19 @@ export class MessageRepository implements IMessageRepository {
     await this.client.update(messages).set({ updatedAt: new Date() }).where(eq(messages.id, messageId));
   }
 
-  async getMessagesByRoomId(roomId: string, limit?: number, before?: Date, after?: Date): Promise<MessageWithUserDTO[]> {
+  /** Not hidden by this viewer ("delete for me"). */
+  private notHiddenBy(viewerId: string) {
+    return notExists(
+      this.client
+        .select({ one: sql`1` })
+        .from(hiddenMessages)
+        .where(and(eq(hiddenMessages.messageId, messages.id), eq(hiddenMessages.userId, viewerId))),
+    );
+  }
+
+  async getMessagesByRoomId(roomId: string, limit?: number, before?: Date, after?: Date, viewerId?: string): Promise<MessageWithUserDTO[]> {
     const filters = [eq(messages.roomId, roomId), eq(messages.isDeleted, false)];
+    if (viewerId) filters.push(this.notHiddenBy(viewerId));
     if (before) {
       filters.push(lt(messages.createdAt, before));
     }
@@ -234,6 +250,7 @@ export class MessageRepository implements IMessageRepository {
         },
         attachments: true,
         poll: POLL_WITH,
+        forwardedFrom: { columns: { username: true, name: true } },
         reactions: {
           with: {
             user: {
@@ -280,6 +297,7 @@ export class MessageRepository implements IMessageRepository {
         },
         attachments: true,
         poll: POLL_WITH,
+        forwardedFrom: { columns: { username: true, name: true } },
         reactions: {
           with: {
             user: {
@@ -393,6 +411,7 @@ export class MessageRepository implements IMessageRepository {
     // Escape LIKE wildcards so "%" or "_" typed by the user match literally.
     const pattern = `%${query.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
     const filters = [ilike(messages.content, pattern), eq(messages.isDeleted, false)];
+    if (viewerId) filters.push(this.notHiddenBy(viewerId));
     if (roomId) {
       // The caller has already checked that the viewer may read this room.
       filters.push(eq(messages.roomId, roomId));
@@ -435,6 +454,7 @@ export class MessageRepository implements IMessageRepository {
         },
         attachments: true,
         poll: POLL_WITH,
+        forwardedFrom: { columns: { username: true, name: true } },
         reactions: {
           with: {
             user: {

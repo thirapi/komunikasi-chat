@@ -11,6 +11,9 @@ import { cn } from "@/lib/utils";
 import type { SidebarRoomDTO } from "@/lib/entities/models/room.model";
 import { getSidebarData } from "../room.action";
 import { forwardMessageAction } from "../messages.action";
+import { useRouter } from "next/navigation";
+import { runAppCommand } from "@/lib/chat/app-commands";
+import { navigateToRoom } from "@/lib/chat/room-navigation";
 
 const MAX_TARGETS = 5;
 
@@ -32,11 +35,14 @@ export function ForwardDialog({
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
+  const [comment, setComment] = useState("");
+  const router = useRouter();
 
   useEffect(() => {
     if (!open) return;
     setSelected([]);
     setQuery("");
+    setComment("");
     let alive = true;
     getSidebarData(currentUserId).then((res) => {
       if (!alive || res.status !== "success" || !res.data) return;
@@ -62,15 +68,22 @@ export function ForwardDialog({
   const send = async () => {
     if (!messageId || selected.length === 0) return;
     setSending(true);
-    const res = await forwardMessageAction(messageId, selected);
+    const res = await forwardMessageAction(messageId, selected, comment);
     setSending(false);
     if (res.status !== "success" || !res.data) {
       toast.error(res.error?.message || "Gagal meneruskan pesan");
       return;
     }
     const { sent, failed } = res.data;
-    if (failed.length === 0) toast.success(sent.length === 1 ? "Pesan diteruskan" : `Diteruskan ke ${sent.length} chat`);
-    else toast.warning(`Diteruskan ke ${sent.length} chat, ${failed.length} gagal`);
+    // The forwarder gets no notification for their own sends, so refresh the
+    // chat list to show the forward as the target chats' latest message.
+    if (sent.length > 0) runAppCommand("refresh-sidebar");
+    const open =
+      sent.length === 1
+        ? { label: "Buka", onClick: () => navigateToRoom(`/channels/${sent[0]}`, router) }
+        : undefined;
+    if (failed.length === 0) toast.success(sent.length === 1 ? "Pesan diteruskan" : `Diteruskan ke ${sent.length} chat`, { action: open });
+    else toast.warning(`Diteruskan ke ${sent.length} chat, ${failed.length} gagal`, { action: open });
     onOpenChange(false);
   };
 
@@ -129,7 +142,21 @@ export function ForwardDialog({
             );
           })}
         </ul>
-        <DialogFooter className="border-t px-5 py-3">
+        <div className="border-t px-5 pt-3">
+          <Input
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Tambahkan pesan (opsional)"
+            maxLength={2000}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void send();
+              }
+            }}
+          />
+        </div>
+        <DialogFooter className="px-5 py-3">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Batal</Button>
           <Button onClick={send} disabled={selected.length === 0 || sending}>
             {sending ? "Meneruskan…" : selected.length > 1 ? `Teruskan ke ${selected.length} chat` : "Teruskan"}

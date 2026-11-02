@@ -1,4 +1,6 @@
 import { IRoomRepository } from "../../repositories/room.repository.interface";
+import { canModerate } from "@/lib/entities/models/room.model";
+import { roleIn } from "./room-roles";
 
 export class RemoveParticipantUseCase {
   constructor(private roomRepository: IRoomRepository) {}
@@ -6,14 +8,16 @@ export class RemoveParticipantUseCase {
     const room = await this.roomRepository.getRoomById(roomId);
     if (!room) throw new Error("Room not found");
 
-    // Only owner can kick (unless requester is kicking themselves, i.e., Leave Room)
-    if (room.ownerId !== requesterId && userId !== requesterId) {
-      throw new Error("Unauthorized to perform this action");
-    }
-
-    // Cannot kick the owner
-    if (userId === room.ownerId && userId !== requesterId) {
-       throw new Error("Cannot kick the owner of the channel");
+    if (userId !== requesterId) {
+      // Removing someone else: the owner may remove anyone but themselves;
+      // an admin only plain members (not the owner, not other admins).
+      const requesterRole = roleIn(room, requesterId);
+      const targetRole = roleIn(room, userId);
+      if (!canModerate(requesterRole)) throw new Error("Hanya pemilik atau admin yang dapat mengeluarkan anggota");
+      if (targetRole === "owner") throw new Error("Pemilik channel tidak bisa dikeluarkan");
+      if (requesterRole === "admin" && targetRole === "admin") {
+        throw new Error("Admin tidak bisa mengeluarkan admin lain");
+      }
     }
 
     // Don't allow leaving general-channel if it is mandatory (optional logic)

@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { ShieldCheck } from "@phosphor-icons/react/dist/ssr";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import {
   HoverCard,
@@ -85,7 +86,10 @@ export function MemberList({
   };
 
   const [showInvite, setShowInvite] = useState(false);
-  const isOwner = currentUserId === roomData.ownerId;
+  // Owner and admins can invite.
+  const isOwner =
+    currentUserId === roomData.ownerId ||
+    roomData.participants.some((p) => p.user.id === currentUserId && p.role === "admin");
 
   const onlineParticipants = useMemo(() => {
     return roomData.participants.filter((p) => onlineUserIds.includes(p.user.id));
@@ -151,6 +155,9 @@ export function MemberList({
               </span>
               {isParticipantOwner && (
                 <Crown weight="fill" className="size-3 text-amber-500 shrink-0" aria-label="Pemilik" />
+              )}
+              {!isParticipantOwner && participant.role === "admin" && (
+                <ShieldCheck weight="fill" className="size-3 text-primary shrink-0" aria-label="Admin" />
               )}
             </div>
             {participant.user.customStatus && (

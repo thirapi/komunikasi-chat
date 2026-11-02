@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { users, userRoles, roomParticipants, sessions, pushSubscriptions, messageReactions, activityLogs, messages, attachments, rooms, userBlocks, savedMessages, polls, pollOptions, pollVotes } from "@/lib/infrastructure/drizzle/schema";
+import { users, userRoles, roomParticipants, sessions, pushSubscriptions, messageReactions, activityLogs, messages, attachments, rooms, userBlocks, savedMessages, polls, pollOptions, pollVotes, hiddenMessages } from "@/lib/infrastructure/drizzle/schema";
 import { eq, and, sql, like, inArray, or } from "drizzle-orm";
 import { IUserRepository } from "@/lib/application/repositories/user.repository.interface";
 import { UserRecord } from "@/lib/entities/models/user.model";
@@ -19,6 +19,7 @@ export class UserRepository implements IUserRepository {
 
         await tx.delete(messageReactions).where(inArray(messageReactions.messageId, userMessageIds));
         await tx.delete(savedMessages).where(inArray(savedMessages.messageId, userMessageIds));
+        await tx.delete(hiddenMessages).where(inArray(hiddenMessages.messageId, userMessageIds));
         // Polls on the user's messages, with their options and everyone's votes.
         const userPolls = await tx.select({ id: polls.id }).from(polls).where(inArray(polls.messageId, userMessageIds));
         const pollIds = userPolls.map((p) => p.id);
@@ -38,6 +39,7 @@ export class UserRepository implements IUserRepository {
       await tx.delete(messageReactions).where(eq(messageReactions.userId, userId));
       await tx.delete(activityLogs).where(eq(activityLogs.userId, userId));
       await tx.delete(savedMessages).where(eq(savedMessages.userId, userId));
+      await tx.delete(hiddenMessages).where(eq(hiddenMessages.userId, userId));
       await tx.delete(pollVotes).where(eq(pollVotes.userId, userId));
       // Blocks in either direction reference the user (foreign keys).
       await tx.delete(userBlocks).where(or(eq(userBlocks.blockerId, userId), eq(userBlocks.blockedId, userId)));

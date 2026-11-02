@@ -11,6 +11,21 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+#### Chat list menu, roles and moderation, better forwards
+
+- **Chat list menu** ("⋯" on hover, right-click or long-press): pin a chat to
+  the top (at most 5, most recently pinned first), mark as unread (a dot until
+  the chat is opened) or read without opening, mute, archive.
+- **Delete for me** on any message (WhatsApp, Telegram), synced to the user's
+  other devices and filtered out of every message read, delta sync and search.
+- **Channel admins**: the owner appoints admins; admins invite, remove plain
+  members, edit channel info, pin and delete anyone's message. Only the owner
+  deletes the channel and manages admins.
+- **Forwards** show "Diteruskan dari [original author]" (kept across
+  re-forwards; the source chat stays private), can carry a note, re-post a
+  poll as a new poll, update the forwarder's own chat list, and offer "Buka".
+- The chat list labels voice notes "🎤 Pesan suara" and videos "🎬 Video".
+
 #### Migration checks and CI
 
 `npm run verify:migrations` runs every migration from scratch on a throwaway

@@ -97,7 +97,7 @@ describe("room.action", () => {
 
       const res = await getRoomSnapshot("r1");
       expect(res).toEqual({ status: "success", data: { room, lastRead, sync, pins: [], block: null }, error: null });
-      expect(syncRoomMessagesController).toHaveBeenCalledWith("r1", null);
+      expect(syncRoomMessagesController).toHaveBeenCalledWith("r1", null, authState.sessionUserId);
       // Read position is always the session user's, never a client-supplied id.
       expect(getLastReadAtController).toHaveBeenCalledWith(authState.sessionUserId, "r1");
     });
@@ -107,7 +107,7 @@ describe("room.action", () => {
       vi.mocked(syncRoomMessagesController).mockResolvedValueOnce({ mode: "delta", changed: [], deletedIds: [], cursor: new Date() } as any);
       vi.mocked(getLastReadAtController).mockResolvedValueOnce({ id: null, at: null });
       await getRoomSnapshot("r1", "2026-01-01T00:00:00.000Z");
-      expect(syncRoomMessagesController).toHaveBeenCalledWith("r1", new Date("2026-01-01T00:00:00.000Z"));
+      expect(syncRoomMessagesController).toHaveBeenCalledWith("r1", new Date("2026-01-01T00:00:00.000Z"), authState.sessionUserId);
     });
 
     it("errors when the room does not exist", async () => {

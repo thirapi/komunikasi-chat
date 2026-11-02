@@ -1,6 +1,7 @@
 import { IMessageRepository } from "../../repositories/message.repository.interface";
 import { IRoomRepository } from "../../repositories/room.repository.interface";
 import { IUserRepository } from "../../repositories/user.repository.interface";
+import type { NewPoll } from "../../repositories/message.repository.interface";
 
 /** WhatsApp caps forwarding at 5 chats at a time; Telegram allows more. */
 export const MAX_FORWARD_TARGETS = 5;
@@ -11,6 +12,12 @@ export interface ForwardPayload {
   content: string;
   attachments: { url: string; key: string; fileType: string; size?: number }[];
   targetRoomIds: string[];
+  /** Original author, kept when a forward is forwarded again (Telegram, Teams). */
+  forwardedFromUserId: string;
+  /** A poll is re-posted as a new poll with fresh votes (Telegram). */
+  poll?: NewPoll;
+  /** Optional note sent after the forward in each chat (WhatsApp, Telegram). */
+  comment?: string;
 }
 
 /**
@@ -32,7 +39,7 @@ export class ForwardMessageUseCase {
     private userRepository: Pick<IUserRepository, "findById">,
   ) {}
 
-  async prepare(userId: string, messageId: string, targetRoomIds: string[]): Promise<ForwardPayload> {
+  async prepare(userId: string, messageId: string, targetRoomIds: string[], comment?: string): Promise<ForwardPayload> {
     const targets = [...new Set(targetRoomIds.filter(Boolean))];
     if (targets.length === 0) throw new ForwardError("Pilih chat tujuan");
     if (targets.length > MAX_FORWARD_TARGETS) {
@@ -67,8 +74,23 @@ export class ForwardMessageUseCase {
       fileType: a.fileType,
       size: a.size ?? undefined,
     }));
-    if (!content.trim() && attachments.length === 0) throw new ForwardError("Pesan ini tidak bisa diteruskan");
+    const poll = message.poll
+      ? {
+          question: message.poll.question,
+          options: message.poll.options.map((o) => o.text),
+          allowMultiple: message.poll.allowMultiple,
+        }
+      : undefined;
+    if (!content.trim() && attachments.length === 0 && !poll) throw new ForwardError("Pesan ini tidak bisa diteruskan");
 
-    return { content, attachments, targetRoomIds: targets };
+    const note = (comment ?? "").trim().slice(0, 2000);
+    return {
+      content,
+      attachments,
+      targetRoomIds: targets,
+      forwardedFromUserId: message.forwardedFromUserId ?? message.userId,
+      ...(poll ? { poll } : {}),
+      ...(note ? { comment: note } : {}),
+    };
   }
 }

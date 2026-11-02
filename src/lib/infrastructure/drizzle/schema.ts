@@ -22,6 +22,7 @@ export const users = pgTable("User", {
 export const usersRelations = relations(users, ({ many }) => ({
     userRoles: many(userRoles),
     messages: many(messages),
+    forwardedMessages: many(messages, { relationName: "forwardedFrom" }),
     roomParticipants: many(roomParticipants),
     sessions: many(sessions),
     reactions: many(messageReactions),
@@ -66,6 +67,8 @@ export const messages = pgTable("Message", {
     editedAt: timestamp("editedAt"),
     /** Forwarded from another chat (shown as "Diteruskan"; the source is not kept). */
     isForwarded: boolean("isForwarded").default(false).notNull(),
+    /** Who wrote the original of a forwarded message (kept across re-forwards). */
+    forwardedFromUserId: text("forwardedFromUserId"),
 }, (t) => [
     // Every per-room read is "messages of room X by time": the newest page,
     // paging back, the sidebar's latest message / unread count, and delta
@@ -151,6 +154,16 @@ export const pollVotesRelations = relations(pollVotes, ({ one }) => ({
     user: one(users, { fields: [pollVotes.userId], references: [users.id] }),
 }));
 
+/** "Delete for me": a message one user no longer sees. */
+export const hiddenMessages = pgTable("HiddenMessage", {
+    id: text("id").primaryKey(),
+    userId: text("userId").notNull().references(() => users.id),
+    messageId: text("messageId").notNull().references(() => messages.id),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => [
+    unique("HiddenMessage_user_message_unq").on(t.userId, t.messageId),
+]);
+
 export const messagesRelations = relations(messages, ({ one, many }) => ({
     user: one(users, { fields: [messages.userId], references: [users.id] }),
     room: one(rooms, { fields: [messages.roomId], references: [rooms.id] }),
@@ -163,6 +176,11 @@ export const messagesRelations = relations(messages, ({ one, many }) => ({
     attachments: many(attachments),
     reactions: many(messageReactions),
     poll: one(polls, { fields: [messages.id], references: [polls.messageId] }),
+    forwardedFrom: one(users, {
+        fields: [messages.forwardedFromUserId],
+        references: [users.id],
+        relationName: "forwardedFrom",
+    }),
 }));
 
 export const rooms = pgTable("Room", {
@@ -193,6 +211,12 @@ export const roomParticipants = pgTable("RoomParticipant", {
     mutedUntil: timestamp("mutedUntil"),
     /** Hidden in the chat list's archive since then; null = not archived. */
     archivedAt: timestamp("archivedAt"),
+    /** Pinned to the top of this user's chat list (at most 5). */
+    pinnedAt: timestamp("pinnedAt"),
+    /** "Mark as unread": shown as unread until the chat is opened. */
+    markedUnread: boolean("markedUnread").default(false).notNull(),
+    /** "member" or "admin"; the owner is rooms.ownerId. */
+    role: text("role").default("member").notNull(),
     joinedAt: timestamp("joinedAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
 }, (t) => ({

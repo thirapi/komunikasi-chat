@@ -3,10 +3,11 @@
 import { roomChannel } from "@/lib/pusher/channels";
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from "react";
 import { getPusher } from "@/lib/pusher/pusher.client";
-import { getMessage, updateLastReadAt, editMessageAction, toggleReactionAction, syncRoomMessages, togglePinAction } from "../messages.action";
+import { getMessage, updateLastReadAt, editMessageAction, toggleReactionAction, syncRoomMessages, togglePinAction, hideMessageAction } from "../messages.action";
 import { PinnedBanner } from "./pinned-banner";
 import { ForwardDialog } from "./forward-dialog";
 import { setUserBlockedAction } from "@/app/(with-sidebar)/user.action";
+import { setMarkedUnreadAction } from "../room.action";
 import { listSavedMessageIdsAction, toggleSavedMessageAction } from "@/app/(with-sidebar)/saved-messages.action";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BlockStatus } from "@/lib/entities/models/block.model";
@@ -87,7 +88,14 @@ export function ChatRoom({
   const { onlineUserIds } = usePresence();
   const [missedCount, setMissedCount] = useState(0);
   const [canShowJump, setCanShowJump] = useState(false);
-  const { markAsRead: markSidebarAsRead, recordActivity, clearActivity, isMuted } = useUnread();
+  const { markAsRead: markSidebarAsRead, recordActivity, clearActivity, isMuted, unreadRooms } = useUnread();
+  // Opening a chat clears a manual "mark as unread", here and on the server.
+  const manualUnread = !!unreadRooms[roomData.id]?.manual;
+  useEffect(() => {
+    if (!manualUnread) return;
+    markSidebarAsRead(roomData.id);
+    void setMarkedUnreadAction(roomData.id, false);
+  }, [manualUnread, roomData.id, markSidebarAsRead]);
   const [showMembers, setShowMembers] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<MessageWithUserDTO | null>(null);
@@ -143,6 +151,42 @@ export function ChatRoom({
     toast(res.data.pinned ? "Pesan disematkan" : "Sematan dilepas", { duration: 2000 });
   }, []);
   const [forwardingMessageId, setForwardingMessageId] = useState<string | null>(null);
+  // Roles: channel owners and admins may delete others' messages.
+  const myRole = localRoomData.participants?.find((p) => p.user.id === userId)?.role;
+  const canModerateOthers = !roomData.isDirect && (roomData.ownerId === userId || myRole === "admin");
+  const dropMessageLocally = useCallback(
+    (messageId: string) => {
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+      setPins((prev) => prev.filter((p) => p.id !== messageId));
+      import("@/lib/infrastructure/cache/client-cache").then((m) => m.clientChatCache.removeMessage(roomData.id, messageId));
+    },
+    [roomData.id],
+  );
+  const handleHide = useCallback(
+    async (messageId: string) => {
+      dropMessageLocally(messageId);
+      const res = await hideMessageAction(messageId);
+      if (res.status !== "success") {
+        toast.error(res.error?.message || "Gagal menghapus pesan");
+        void syncMessages();
+        return;
+      }
+      toast("Pesan dihapus untukmu", { duration: 2000 });
+    },
+    // syncMessages is declared later; read through a ref-free closure at call time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dropMessageLocally],
+  );
+  // "Delete for me" from another device of this user (relayed by the
+  // notification listener).
+  useEffect(() => {
+    const onHidden = (e: Event) => {
+      const { roomId, messageId } = (e as CustomEvent<{ roomId: string; messageId: string }>).detail ?? {};
+      if (roomId === roomData.id && messageId) dropMessageLocally(messageId);
+    };
+    window.addEventListener("komunikasi:message-hidden", onHidden);
+    return () => window.removeEventListener("komunikasi:message-hidden", onHidden);
+  }, [roomData.id, dropMessageLocally]);
   // Saved messages: ids for the toolbar state, shared across rooms via the
   // query cache so switching rooms does not refetch.
   const queryClient = useQueryClient();
@@ -975,6 +1019,12 @@ export function ChatRoom({
         return prev;
       });
     });
+    chatChannel.bind("roles-changed", (data: { userId: string; role: "admin" | "member" }) => {
+      setLocalRoomData((prev) => ({
+        ...prev,
+        participants: prev.participants.map((p) => (p.user.id === data.userId ? { ...p, role: data.role } : p)),
+      }));
+    });
     chatChannel.bind("pins-changed", (data: { pins: PinnedMessageDTO[] }) => {
       if (Array.isArray(data?.pins)) setPins(data.pins);
     });
@@ -1272,6 +1322,8 @@ export function ChatRoom({
               onForward={setForwardingMessageId}
               savedIds={savedIds}
               onToggleSave={handleToggleSave}
+              onHide={handleHide}
+              canModerateOthers={canModerateOthers}
               onLoadMore={loadMoreMessages}
               hasMore={hasMore}
               isLoadingMore={isLoadingMore}

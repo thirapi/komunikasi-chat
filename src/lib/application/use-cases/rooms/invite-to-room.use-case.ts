@@ -1,6 +1,8 @@
 import { IRoomRepository } from "../../repositories/room.repository.interface";
 import { IUserRepository } from "../../repositories/user.repository.interface";
 import { createId } from "@paralleldrive/cuid2";
+import { canModerate } from "@/lib/entities/models/room.model";
+import { roleIn } from "./room-roles";
 
 export class InviteToRoomUseCase {
   constructor(
@@ -33,9 +35,9 @@ export class InviteToRoomUseCase {
     const room = await this.roomRepository.getRoomById(roomId);
     if (!room) throw new Error("Channel tidak ditemukan");
 
-    // Only owner can invite to private channels
-    if (!room.isPublic && room.ownerId !== requesterId) {
-      throw new Error("Hanya pemilik channel yang dapat mengundang anggota baru");
+    // Private channels: the owner and admins invite.
+    if (!room.isPublic && !canModerate(roleIn(room, requesterId))) {
+      throw new Error("Hanya pemilik atau admin channel yang dapat mengundang anggota baru");
     }
 
     // Check if user is already a member

@@ -15,6 +15,7 @@ import {
   BookmarkSimple,
   Archive,
   CaretLeft,
+  PushPin,
 } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
@@ -48,6 +49,7 @@ import { cn } from "@/lib/utils";
 import { Shortcut } from "@/components/ui/kbd";
 import { onAppCommand } from "@/lib/chat/app-commands";
 import { SavedMessagesDialog } from "@/components/saved-messages-dialog";
+import { ChatListItemMenu } from "@/components/chat-list-item-menu";
 import { isPlainLeftClick, navigateToRoom, prefetchRoom, warmRecentRooms } from "@/lib/chat/room-navigation";
 
 // Dialogs loaded on demand
@@ -147,7 +149,8 @@ export function AppSidebar({
   const searchParams = useSearchParams();
   const isMobileFromHook = useIsMobile();
   const { setOpenMobile } = useSidebar();
-  const { unreadRooms, roomActivity, roomTyping, mutedRooms, archivedRooms, initializeUnread } = useUnread();
+  const { unreadRooms, roomActivity, roomTyping, mutedRooms, archivedRooms, pinnedChats, initializeUnread } = useUnread();
+  const [menuFor, setMenuFor] = React.useState<string | null>(null);
   const [showArchive, setShowArchive] = React.useState(false);
   const { onlineUserIds } = usePresence();
   const customEmojis = useCustomEmojis();
@@ -232,6 +235,8 @@ export function AppSidebar({
         unreadCount: r.unreadCount,
         mutedUntil: r.mutedUntil,
         archivedAt: r.archivedAt,
+        chatPinnedAt: r.chatPinnedAt,
+        markedUnread: r.markedUnread,
         lastMessageTime: r.lastMessageTime,
       }))
     );
@@ -279,11 +284,15 @@ export function AppSidebar({
   const allChats = React.useMemo(() => {
     const combined = [...groups, ...directMessages];
     return combined.sort((a, b) => {
+      // Pinned chats first, most recently pinned on top; then by activity.
+      const pinA = pinnedChats[a.id] ?? 0;
+      const pinB = pinnedChats[b.id] ?? 0;
+      if (pinA || pinB) return pinB - pinA;
       const timeA = a.lastMessageTime ? new Date(a.lastMessageTime).getTime() : 0;
       const timeB = b.lastMessageTime ? new Date(b.lastMessageTime).getTime() : 0;
       return timeB - timeA;
     });
-  }, [groups, directMessages]);
+  }, [groups, directMessages, pinnedChats]);
 
   // Filtered by tab and inline search
   // Archived chats live behind an "Arsip" row (search still finds them).
@@ -592,7 +601,15 @@ export function AppSidebar({
               const isActive = pathname.startsWith(chat.url);
               const isOnline = !chat.isChannel && onlineUserIds.includes(chat.userId ?? "");
               return (
-                <li key={chat.id}>
+                <li
+                  key={chat.id}
+                  className="group/chat relative"
+                  onContextMenu={(e) => {
+                    // Right-click / long-press opens the chat's menu.
+                    e.preventDefault();
+                    setMenuFor(chat.id);
+                  }}
+                >
                   <Link
                     href={chat.url}
                     prefetch={false}
@@ -636,6 +653,9 @@ export function AppSidebar({
                             <Hash className="size-3.5 shrink-0 text-muted-foreground" aria-label="Channel" />
                           )}
                           <span className="truncate">{chat.name}</span>
+                          {pinnedChats[chat.id] && (
+                            <PushPin weight="fill" className="size-3 shrink-0 text-muted-foreground" aria-label="Disematkan" />
+                          )}
                           {mutedRooms[chat.id] > Date.now() && (
                             <BellSlash className="size-3.5 shrink-0 text-muted-foreground" aria-label="Dibisukan" />
                           )}
@@ -682,21 +702,28 @@ export function AppSidebar({
                             )}
                             <span
                               className={cn(
-                                "flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums",
+                                "flex items-center justify-center rounded-full text-[11px] font-semibold tabular-nums",
+                                // Marked unread by hand: a dot, no number.
+                                chat.unreadCount > 0 ? "h-[18px] min-w-[18px] px-1.5" : "size-2.5",
                                 // Muted rooms keep their count, in grey.
                                 mutedRooms[chat.id] > Date.now() && !chat.hasMention
                                   ? "bg-muted-foreground/30 text-foreground/80"
                                   : "bg-primary text-primary-foreground"
                               )}
-                              aria-label={`${chat.unreadCount} pesan belum dibaca`}
+                              aria-label={chat.unreadCount > 0 ? `${chat.unreadCount} pesan belum dibaca` : "Ditandai belum dibaca"}
                             >
-                              {chat.unreadCount > 99 ? "99+" : Math.max(1, chat.unreadCount)}
+                              {chat.unreadCount > 99 ? "99+" : chat.unreadCount > 0 ? chat.unreadCount : ""}
                             </span>
                           </span>
                         )}
                       </div>
                     </div>
                   </Link>
+                  <ChatListItemMenu
+                    roomId={chat.id}
+                    open={menuFor === chat.id}
+                    onOpenChange={(o) => setMenuFor(o ? chat.id : null)}
+                  />
                 </li>
               );
             })}

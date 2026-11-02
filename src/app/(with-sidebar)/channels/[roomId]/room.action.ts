@@ -18,7 +18,13 @@ import type { PinnedMessageDTO } from "@/lib/entities/models/message.model";
 import type { BlockStatus } from "@/lib/entities/models/block.model";
 import { getRoomBlockStatusController } from "@/lib/interface-adapters/controllers/users/block-user.controller";
 import { getLastReadAtController } from "@/lib/interface-adapters/controllers/rooms/get-last-read-at.controller";
-import { setRoomMuteController, setRoomArchivedController } from "@/lib/interface-adapters/controllers/rooms/set-room-mute.controller";
+import {
+  setRoomMuteController,
+  setRoomArchivedController,
+  setChatPinnedController,
+  setMarkedUnreadController,
+  markRoomReadController,
+} from "@/lib/interface-adapters/controllers/rooms/set-room-mute.controller";
 import { getRoomByUserIdController } from "@/lib/interface-adapters/controllers/rooms/get-room-by-user-id.controller";
 import { getSidebarDataController } from "@/lib/interface-adapters/controllers/rooms/get-sidebar-data.controller";
 import { SidebarRoomDTO } from "@/lib/entities/models/room.model";
@@ -50,7 +56,7 @@ export const getSidebarData = async (
 };
 import { joinRoomController } from "@/lib/interface-adapters/controllers/rooms/join-room.controller";
 import { removeParticipantController } from "@/lib/interface-adapters/controllers/rooms/remove-participant.controller";
-import { updateRoomController, deleteRoomController } from "@/lib/interface-adapters/controllers/rooms/room-settings.controller";
+import { updateRoomController, deleteRoomController, setParticipantRoleController } from "@/lib/interface-adapters/controllers/rooms/room-settings.controller";
 import { searchInvitableUsersController, inviteToRoomController } from "@/lib/interface-adapters/controllers/rooms/invite-to-room.controller";
 import { revalidatePath } from "next/cache";
 
@@ -111,7 +117,7 @@ export const getRoomSnapshot = async (
     await assertCanReadRoom(roomId, viewerId);
     const [room, sync, lastRead, pins] = await Promise.all([
       getRoomByIdController(roomId, viewerId),
-      syncRoomMessagesController(roomId, since ? new Date(since) : null),
+      syncRoomMessagesController(roomId, since ? new Date(since) : null, viewerId),
       getLastReadAtController(viewerId, roomId),
       getPinnedMessagesController(roomId),
     ]);
@@ -159,6 +165,52 @@ export const setRoomArchivedAction = async (
   } catch (err: any) {
     console.error("Action Error:", err);
     return { status: "error", data: null, error: { message: err.message, type: err.name } };
+  }
+};
+
+/** Pin a chat to the top of the chat list (max 5) or unpin it. */
+export const setChatPinnedAction = async (roomId: string, pinned: boolean) => {
+  try {
+    const actorId = await requireWriter();
+    await assertRoomMember(roomId, actorId);
+    return { status: "success" as const, data: { pinnedAt: await setChatPinnedController(actorId, roomId, pinned) }, error: null };
+  } catch (err: any) {
+    return { status: "error" as const, data: null, error: { message: err.message, type: err.name } };
+  }
+};
+
+/** Owner only: make a member an admin, or back to a member. */
+export const setParticipantRoleAction = async (roomId: string, userId: string, role: "admin" | "member") => {
+  try {
+    const actorId = await requireWriter();
+    await setParticipantRoleController(actorId, roomId, userId, role);
+    return { status: "success" as const, data: null, error: null };
+  } catch (err: any) {
+    return { status: "error" as const, data: null, error: { message: err.message, type: err.name } };
+  }
+};
+
+/** Mark a chat as read from the chat list, without opening it. */
+export const markRoomReadAction = async (roomId: string) => {
+  try {
+    const actorId = await requireWriter();
+    await assertRoomMember(roomId, actorId);
+    await markRoomReadController(actorId, roomId);
+    return { status: "success" as const, data: null, error: null };
+  } catch (err: any) {
+    return { status: "error" as const, data: null, error: { message: err.message, type: err.name } };
+  }
+};
+
+/** Mark a chat as unread (or clear it). */
+export const setMarkedUnreadAction = async (roomId: string, markedUnread: boolean) => {
+  try {
+    const actorId = await requireWriter();
+    await assertRoomMember(roomId, actorId);
+    await setMarkedUnreadController(actorId, roomId, markedUnread);
+    return { status: "success" as const, data: null, error: null };
+  } catch (err: any) {
+    return { status: "error" as const, data: null, error: { message: err.message, type: err.name } };
   }
 };
 

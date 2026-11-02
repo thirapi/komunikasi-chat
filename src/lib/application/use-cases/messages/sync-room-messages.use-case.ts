@@ -1,5 +1,6 @@
 import { MessageWithUserDTO } from "@/lib/entities/models/message.model";
 import { IMessageRepository } from "../../repositories/message.repository.interface";
+import type { IHiddenMessageRepository } from "../../repositories/hidden-message.repository.interface";
 
 /** Page size for a room's newest messages (same as the regular first page). */
 export const ROOM_PAGE_SIZE = 50;
@@ -26,19 +27,27 @@ export type RoomSync =
  * when too much changed to patch, it gets the newest page in full.
  */
 export class SyncRoomMessagesUseCase {
-  constructor(private messageRepository: IMessageRepository) {}
+  constructor(
+    private messageRepository: IMessageRepository,
+    private hiddenRepository?: Pick<IHiddenMessageRepository, "hiddenSince">,
+  ) {}
 
-  async execute(roomId: string, since?: Date | null): Promise<RoomSync> {
+  /** `viewerId`: leave out what that user hid ("delete for me"). */
+  async execute(roomId: string, since?: Date | null, viewerId?: string): Promise<RoomSync> {
     const cursor = new Date(Date.now() - CURSOR_SLACK_MS);
 
     if (since) {
-      const delta = await this.messageRepository.getRoomChangesSince(roomId, since, ROOM_PAGE_SIZE);
+      const delta = await this.messageRepository.getRoomChangesSince(roomId, since, ROOM_PAGE_SIZE, viewerId);
       if (!delta.overflow) {
-        return { mode: "delta", changed: delta.changed, deletedIds: delta.deletedIds, cursor };
+        // Messages hidden on another device since the cursor are removals too.
+        const hidden =
+          viewerId && this.hiddenRepository ? await this.hiddenRepository.hiddenSince(viewerId, roomId, since) : [];
+        const deletedIds = [...new Set([...delta.deletedIds, ...hidden])];
+        return { mode: "delta", changed: delta.changed, deletedIds, cursor };
       }
     }
 
-    const messages = await this.messageRepository.getMessagesByRoomId(roomId, ROOM_PAGE_SIZE);
+    const messages = await this.messageRepository.getMessagesByRoomId(roomId, ROOM_PAGE_SIZE, undefined, undefined, viewerId);
     return { mode: "full", messages, cursor };
   }
 }

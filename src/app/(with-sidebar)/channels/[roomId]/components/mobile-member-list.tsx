@@ -41,7 +41,10 @@ export function MobileMemberList({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmData, setConfirmData] = useState<{ userId: string, isSelf: boolean } | null>(null);
 
-  const isOwner = currentUserId === roomData.ownerId;
+  // Owner and admins can invite.
+  const isOwner =
+    currentUserId === roomData.ownerId ||
+    roomData.participants.some((p) => p.user.id === currentUserId && p.role === "admin");
 
   const handleStartDM = async (targetUserId: string) => {
     if (targetUserId === currentUserId) return;

@@ -25,7 +25,7 @@ interface Props {
 export function RealtimeNotificationListener({ user }: Props) {
   const pathname = usePathname();
   const router = useRouter();
-  const { markAsUnread, markAsRead, recordActivity, clearActivity, unreadRooms, setRoomTyping, isMuted, setMuted, setArchived } = useUnread();
+  const { markAsUnread, markAsRead, recordActivity, clearActivity, unreadRooms, setRoomTyping, isMuted, setMuted, setArchived, setChatPinned, markAsUnreadManually } = useUnread();
   // Rooms the sidebar already knows about; a message from any other room means
   // someone started a DM / added us to a channel, so the sidebar must reload.
   const knownRoomsRef = useRef(unreadRooms);
@@ -169,6 +169,19 @@ export function RealtimeNotificationListener({ user }: Props) {
     );
 
     // CHAT: mute changed on another tab/device.
+    // "Delete for me" on another device: drop it from the cache and tell an
+    // open room.
+    channel.bind("message-hidden", (data: { roomId: string; messageId: string }) => {
+      if (!data?.roomId || !data.messageId) return;
+      void clientChatCache.removeMessage(data.roomId, data.messageId);
+      window.dispatchEvent(new CustomEvent("komunikasi:message-hidden", { detail: data }));
+    });
+    channel.bind("chat-list-changed", (data: { roomId: string; pinnedAt?: string | null; markedUnread?: boolean }) => {
+      if (!data?.roomId) return;
+      if ("pinnedAt" in data) setChatPinned(data.roomId, data.pinnedAt ?? null);
+      if (data.markedUnread === true) markAsUnreadManually(data.roomId);
+      if (data.markedUnread === false) markAsRead(data.roomId);
+    });
     channel.bind("room-archive-changed", (data: { roomId: string; archivedAt: string | null }) => {
       if (data?.roomId) setArchived(data.roomId, !!data.archivedAt);
     });
@@ -195,7 +208,7 @@ export function RealtimeNotificationListener({ user }: Props) {
       channel.unbind_all();
       getPusher().unsubscribe(userChannel(user.id));
     };
-  }, [user.id, user.username, markAsUnread, markAsRead, recordActivity, clearActivity, setRoomTyping, isMuted, setMuted, setArchived, router]);
+  }, [user.id, user.username, markAsUnread, markAsRead, recordActivity, clearActivity, setRoomTyping, isMuted, setMuted, setArchived, setChatPinned, markAsUnreadManually, router]);
 
   return null;
 }

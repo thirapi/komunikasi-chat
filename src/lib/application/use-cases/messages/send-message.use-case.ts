@@ -43,7 +43,7 @@ export class SendMessageUseCase {
     replyTo?: string,
     attachments?: { url: string; key: string; fileType: string; size?: number }[],
     optimisticId?: string,
-    options?: { isForwarded?: boolean; poll?: NewPoll }
+    options?: { isForwarded?: boolean; forwardedFromUserId?: string; poll?: NewPoll }
   ): Promise<MessageWithUserDTO> {
     await this.assertNotBlocked(userId, roomId);
 

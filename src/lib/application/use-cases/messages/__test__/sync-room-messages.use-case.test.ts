@@ -14,7 +14,7 @@ describe("SyncRoomMessagesUseCase", () => {
     const r = repo();
     const res = await new SyncRoomMessagesUseCase(r).execute("r1", null);
     expect(res.mode).toBe("full");
-    expect(r.getMessagesByRoomId).toHaveBeenCalledWith("r1", 50);
+    expect(r.getMessagesByRoomId).toHaveBeenCalledWith("r1", 50, undefined, undefined, undefined);
     expect(r.getRoomChangesSince).not.toHaveBeenCalled();
   });
 
@@ -24,7 +24,7 @@ describe("SyncRoomMessagesUseCase", () => {
       getRoomChangesSince: vi.fn().mockResolvedValue({ changed: [{ id: "m9" }], deletedIds: ["m3"], overflow: false }),
     });
     const res = await new SyncRoomMessagesUseCase(r).execute("r1", since);
-    expect(r.getRoomChangesSince).toHaveBeenCalledWith("r1", since, 50);
+    expect(r.getRoomChangesSince).toHaveBeenCalledWith("r1", since, 50, undefined);
     expect(res).toMatchObject({ mode: "delta", changed: [{ id: "m9" }], deletedIds: ["m3"] });
     expect(r.getMessagesByRoomId).not.toHaveBeenCalled();
   });

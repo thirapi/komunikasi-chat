@@ -13,7 +13,7 @@ const formSchema = z.object({
     before: z.date().optional(),
     after: z.date().optional(),
 });
-export const getMessageController = async (roomId: string, limit?: number, before?: Date, after?: Date) => {
+export const getMessageController = async (roomId: string, limit?: number, before?: Date, after?: Date, viewerId?: string) => {
     const message = {
         roomId,
         limit,
@@ -29,5 +29,5 @@ export const getMessageController = async (roomId: string, limit?: number, befor
         throw new Error(`Invalid input: ${JSON.stringify(errorField)}`);
     }
 
-    return await getMessageUseCase.execute(parsedMessage.data.roomId, parsedMessage.data.limit, parsedMessage.data.before, parsedMessage.data.after);
+    return await getMessageUseCase.execute(parsedMessage.data.roomId, parsedMessage.data.limit, parsedMessage.data.before, parsedMessage.data.after, viewerId);
 }

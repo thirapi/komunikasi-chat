@@ -218,6 +218,13 @@
       "when": 1793581872792,
       "tag": "0030_saved_archive_polls",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1793583751599,
+      "tag": "0031_forward_origin_chat_pins_roles_hidden",
+      "breakpoints": true
     }
   ]
 }

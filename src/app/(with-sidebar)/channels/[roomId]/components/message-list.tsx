@@ -34,6 +34,8 @@ export function MessageList({
   onForward,
   savedIds,
   onToggleSave,
+  onHide,
+  canModerateOthers = false,
   userId,
   onLoadMore,
   hasMore,
@@ -70,6 +72,9 @@ export function MessageList({
   onForward?: (messageId: string) => void;
   savedIds?: Set<string>;
   onToggleSave?: (messageId: string) => void;
+  onHide?: (messageId: string) => void;
+  /** Channel owner/admin: may delete anyone's message. */
+  canModerateOthers?: boolean;
   userId: string;
   onLoadMore: () => void;
   hasMore: boolean;
@@ -256,6 +261,8 @@ export function MessageList({
           onForward={onForward}
           isSaved={savedIds?.has(msg.id) ?? false}
           onToggleSave={onToggleSave}
+          onHide={msg.isOptimistic ? undefined : onHide}
+          canDeleteForEveryone={!msg.isOptimistic && (msg.userId === userId || canModerateOthers)}
           receipt={
             roomData.isDirect && msg.userId === userId && !msg.isOptimistic && !msg.sendError
               ? peerReadTime >= msgTime ? "read" : "sent"
