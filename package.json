@@ -18,6 +18,7 @@
     "measure:bundle": "tsx scripts/measure-bundle.ts",
     "measure:sidebar": "tsx scripts/measure-sidebar-queries.ts",
     "verify:sidebar": "tsx scripts/verify-sidebar-query.ts",
+    "verify:migrations": "tsx scripts/verify-migrations.ts",
     "measure:markdown": "tsx scripts/measure-markdown-pipeline.ts",
     "measure:password": "tsx scripts/measure-password-hashing.ts",
     "cleanup:attachments": "tsx scripts/cleanup-deleted-attachments.ts",

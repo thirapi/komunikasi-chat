@@ -44,7 +44,20 @@ session throttling) are needed to boot. Everything else degrades gracefully: no
 push keys means no notifications, not a broken app.
 
 Migrations are not run on deploy. After pulling a change that adds one to
-`drizzle/`, run `npm run db:migrate` against the database yourself.
+`drizzle/`, run `npm run db:migrate` against the database yourself, and check
+it ends with `✅ Migrations completed successfully!`. Before that, prove the
+migrations on a throwaway database (CI does this on every push too):
+
+```console
+$ docker compose up -d postgres
+$ MIGRATION_TEST_DATABASE_URL=postgres://postgres:password@localhost:5432/mydb npm run verify:migrations
+✓ 31 migrations applied from scratch
+✓ all 20 tables in schema.ts exist with every column
+✓ re-running is a no-op
+```
+
+`npx tsx scripts/inspect-migration-state.ts` (read-only) shows which
+migrations a database has recorded and which of their effects exist.
 
 ---
 
@@ -328,6 +341,7 @@ scripts/    build, measurement, maintenance
 | `dev` `build` `start` | Next.js |
 | `lint` `test` | ESLint, Vitest |
 | `db:migrate` | apply the migrations in `drizzle/` (not run on deploy) |
+| `verify:migrations` | run every migration from scratch on a throwaway Postgres and check schema.ts |
 | `db:push` `db:seed` `db:reset` `db:studio` | dev schema sync and data |
 | `npx drizzle-kit generate` | new migration after editing `schema.ts` |
 | `cap:sync` `cap:open:android` `cap:run:android` `cap:open:ios` | native |

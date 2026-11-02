@@ -11,6 +11,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+#### Migration checks and CI
+
+`npm run verify:migrations` runs every migration from scratch on a throwaway
+Postgres, checks that each table and column in `schema.ts` exists and that
+re-running is a no-op; it refuses Neon URLs and `DATABASE_URL`. A new GitHub
+Actions workflow runs typecheck, tests and this check on every push and pull
+request. Run against the old `drizzle/0026`, it fails with the same error
+production hit.
+
 #### Saved messages, archive and polls
 
 - **Saved messages** (WhatsApp's starred / Teams' saved): save from the

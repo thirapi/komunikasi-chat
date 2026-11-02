@@ -1,0 +1,38 @@
+name: CI
+
+# Typecheck, unit tests, and a from-scratch run of every migration against a
+# throwaway Postgres, so a broken migration (like the old drizzle/0026) or a
+# column the code reads but no migration creates fails here instead of in
+# production.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx vitest run
+      - run: npm run verify:migrations
+        env:
+          MIGRATION_TEST_DATABASE_URL: postgres://postgres:ci@localhost:5432/postgres

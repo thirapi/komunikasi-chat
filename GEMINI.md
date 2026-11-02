@@ -34,6 +34,7 @@
 
 6. **Migrations**:
     - Migrations are not run on deploy. A change that adds columns read by queries MUST ship its migration (`npx drizzle-kit generate`) and the migration must be applied before the code is deployed.
+    - Every migration change MUST pass `npm run verify:migrations` (throwaway Postgres; CI runs it on every push). Confirm `db:migrate` printed `✅ Migrations completed successfully!` before deploying code that needs it.
 
 ## Implementation Rules
 1. **Unread Management**:
