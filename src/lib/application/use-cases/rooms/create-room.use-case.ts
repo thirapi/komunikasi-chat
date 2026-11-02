@@ -1,5 +1,6 @@
 import { RoomWithParticipantsDTO } from "@/lib/entities/models/room.model";
 import { IRoomRepository } from "../../repositories/room.repository.interface";
+import { withoutOthersReadPositions } from "./apply-room-privacy";
 
 export class CreateRoomUseCase {
   constructor(private roomRepository: IRoomRepository) {}
@@ -12,7 +13,7 @@ export class CreateRoomUseCase {
     isPublic: boolean = false,
     ownerId?: string
   ): Promise<RoomWithParticipantsDTO> {
-    return this.roomRepository.createRoom(
+    const room = await this.roomRepository.createRoom(
       name,
       isDirect,
       participantIds,
@@ -21,5 +22,6 @@ export class CreateRoomUseCase {
       isPublic,
       ownerId
     );
+    return withoutOthersReadPositions(room, ownerId ?? null);
   }
 }

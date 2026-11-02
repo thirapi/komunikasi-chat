@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { rooms, roomParticipants, messages, users, userRoles, roles as rolesTable } from "@/lib/infrastructure/drizzle/schema";
+import { rooms, roomParticipants, messages, users, userRoles, roles as rolesTable, polls, pollOptions, pollVotes, savedMessages, messageReactions, attachments } from "@/lib/infrastructure/drizzle/schema";
 import { eq, and, asc, desc, not, sql, exists, inArray } from "drizzle-orm";import { IRoomRepository } from "@/lib/application/repositories/room.repository.interface";
 import { RoomWithParticipantsDTO, SidebarRoomRow } from "@/lib/entities/models/room.model";
 import { createId } from "@paralleldrive/cuid2";
@@ -112,6 +112,7 @@ export class RoomRepository implements IRoomRepository {
         r."isDirect"                    AS "isDirect",
         me."lastReadAt"                 AS "lastReadAt",
         me."mutedUntil"                 AS "mutedUntil",
+        me."archivedAt"                 AS "archivedAt",
         lm."id"                         AS "lastMessageId",
         lm."content"                    AS "lastMessageContent",
         lm."userId"                     AS "lastMessageUserId",
@@ -359,7 +360,7 @@ export class RoomRepository implements IRoomRepository {
   async getOtherParticipants(
     roomId: string,
     excludeUserId: string
-  ): Promise<{ userId: string; mutedUntil: Date | null }[]> {
+  ): Promise<{ userId: string; mutedUntil: Date | null; archivedAt: Date | null }[]> {
     const others = await this.client.query.roomParticipants.findMany({
       where: and(
         eq(roomParticipants.roomId, roomId),
@@ -368,10 +369,19 @@ export class RoomRepository implements IRoomRepository {
       columns: {
         userId: true,
         mutedUntil: true,
+        archivedAt: true,
       },
     });
 
     return others;
+  }
+
+  async setArchived(userIds: string[], roomId: string, archivedAt: Date | null): Promise<void> {
+    if (userIds.length === 0) return;
+    await this.client
+      .update(roomParticipants)
+      .set({ archivedAt })
+      .where(and(eq(roomParticipants.roomId, roomId), inArray(roomParticipants.userId, userIds)));
   }
 
   async setMutedUntil(userId: string, roomId: string, mutedUntil: Date | null): Promise<void> {
@@ -599,9 +609,34 @@ export class RoomRepository implements IRoomRepository {
   }
 
   async deleteRoom(roomId: string): Promise<void> {
-    await this.client.delete(roomParticipants).where(eq(roomParticipants.roomId, roomId));
-    await this.client.delete(messages).where(eq(messages.roomId, roomId));
-    await this.client.delete(rooms).where(eq(rooms.id, roomId));
+    // Every table that references a message has to go first (foreign keys):
+    // deleting a channel that had a reaction or an attachment used to fail.
+    await this.client.transaction(async (tx) => {
+      const roomMessageIds = (
+        await tx.select({ id: messages.id }).from(messages).where(eq(messages.roomId, roomId))
+      ).map((m) => m.id);
+
+      await tx.delete(roomParticipants).where(eq(roomParticipants.roomId, roomId));
+
+      if (roomMessageIds.length > 0) {
+        const roomPollIds = (
+          await tx.select({ id: polls.id }).from(polls).where(inArray(polls.messageId, roomMessageIds))
+        ).map((p) => p.id);
+        if (roomPollIds.length > 0) {
+          await tx.delete(pollVotes).where(inArray(pollVotes.pollId, roomPollIds));
+          await tx.delete(pollOptions).where(inArray(pollOptions.pollId, roomPollIds));
+          await tx.delete(polls).where(inArray(polls.id, roomPollIds));
+        }
+        await tx.delete(savedMessages).where(inArray(savedMessages.messageId, roomMessageIds));
+        await tx.delete(messageReactions).where(inArray(messageReactions.messageId, roomMessageIds));
+        await tx.delete(attachments).where(inArray(attachments.messageId, roomMessageIds));
+        // Replies point at messages of the same room.
+        await tx.update(messages).set({ replyTo: null }).where(eq(messages.roomId, roomId));
+        await tx.delete(messages).where(eq(messages.roomId, roomId));
+      }
+
+      await tx.delete(rooms).where(eq(rooms.id, roomId));
+    });
   }
 
   async fallbackLastReadMessageId(

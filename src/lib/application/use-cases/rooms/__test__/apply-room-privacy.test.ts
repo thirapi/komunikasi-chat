@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { applyRoomPrivacy, lastSeenLabel } from "../apply-room-privacy";
+import { applyRoomPrivacy, lastSeenLabel, withoutOthersReadPositions } from "../apply-room-privacy";
 import { UpdateLastReadAtUseCase } from "../update-last-read-at.use-case";
 import { UpdatePresenceUseCase } from "../../presence/update-presence.use-case";
 
@@ -107,5 +107,14 @@ describe("last seen writes", () => {
     const privacy = { touchLastSeen: vi.fn() };
     await new UpdatePresenceUseCase(presence(false), { trigger: vi.fn() } as any, privacy).execute("u1", "offline");
     expect(privacy.touchLastSeen).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("withoutOthersReadPositions", () => {
+  it("drops everyone else's read position and keeps the viewer's", () => {
+    const r = withoutOthersReadPositions(room(on, on), "me");
+    expect(r.participants[0].lastReadAt).toEqual(readAt);
+    expect(r.participants[1].lastReadAt).toBeNull();
+    expect(r.participants[1].lastReadMessageId).toBeNull();
   });
 });

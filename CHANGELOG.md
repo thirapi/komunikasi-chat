@@ -11,6 +11,21 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+#### Saved messages, archive and polls
+
+- **Saved messages** (WhatsApp's starred / Teams' saved): save from the
+  message toolbar, open the list from the user menu, jump back to a message.
+  Only messages that still exist in rooms you are in are listed.
+- **Archive a chat** from its details. Archived chats sit behind an "Arsip"
+  row at the top of the chat list; a new message brings a chat back unless it
+  is muted (Telegram's rule).
+- **Polls** from the attach menu: question, 2–10 options, optional multiple
+  answers, votes visible to the room and changeable, live results. A poll is
+  created with its message in one transaction and votes update everyone
+  through `message-updated`.
+- `npm run cleanup:attachments` removes R2 files of messages deleted before
+  storage cleanup existed (dry run unless `--apply`; same safety rules).
+
 #### Forward, voice messages, blocking, last seen and privacy
 
 Middle ground between WhatsApp, Telegram and Teams again.
@@ -140,6 +155,18 @@ sidebar, search and dialogs were restyled consistently with live previews and
 simpler unread/mention indicators.
 
 ### Fixed
+
+#### Deleting a channel failed
+
+`deleteRoom` deleted the room's messages while reactions, attachments (and
+now polls and saved messages) still referenced them, so deleting a channel
+that had any of those failed. It now removes them first, in one transaction.
+
+#### Read positions in older room endpoints
+
+Starting a DM, creating a room, listing your rooms and exploring channels
+returned every member's read position regardless of their privacy setting.
+Those responses now carry only the viewer's own.
 
 #### Reactions marked messages as edited
 

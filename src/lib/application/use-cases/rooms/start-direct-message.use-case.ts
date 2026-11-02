@@ -2,6 +2,7 @@ import { RoomWithParticipantsDTO } from "@/lib/entities/models/room.model";
 import { IRoomRepository } from "../../repositories/room.repository.interface";
 import { avatarService } from "@/lib/infrastructure/services/avatar.service";
 import type { IUserBlockRepository } from "../../repositories/user-block.repository.interface";
+import { withoutOthersReadPositions } from "./apply-room-privacy";
 
 export class StartDirectMessageUseCase {
   constructor(
@@ -23,7 +24,7 @@ export class StartDirectMessageUseCase {
 
     if (existingRoom) {
       return {
-        room: existingRoom,
+        room: withoutOthersReadPositions(existingRoom, currentUserId),
         action: "existing",
       };
     }
@@ -49,7 +50,7 @@ export class StartDirectMessageUseCase {
     );
 
     return {
-      room: newRoom,
+      room: withoutOthersReadPositions(newRoom, currentUserId),
       action: "created",
     };
   }

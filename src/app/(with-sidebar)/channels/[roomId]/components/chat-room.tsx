@@ -7,6 +7,8 @@ import { getMessage, updateLastReadAt, editMessageAction, toggleReactionAction, 
 import { PinnedBanner } from "./pinned-banner";
 import { ForwardDialog } from "./forward-dialog";
 import { setUserBlockedAction } from "@/app/(with-sidebar)/user.action";
+import { listSavedMessageIdsAction, toggleSavedMessageAction } from "@/app/(with-sidebar)/saved-messages.action";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BlockStatus } from "@/lib/entities/models/block.model";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -141,6 +143,33 @@ export function ChatRoom({
     toast(res.data.pinned ? "Pesan disematkan" : "Sematan dilepas", { duration: 2000 });
   }, []);
   const [forwardingMessageId, setForwardingMessageId] = useState<string | null>(null);
+  // Saved messages: ids for the toolbar state, shared across rooms via the
+  // query cache so switching rooms does not refetch.
+  const queryClient = useQueryClient();
+  const { data: savedIdList } = useQuery({
+    queryKey: ["saved-message-ids"],
+    queryFn: () => listSavedMessageIdsAction(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const savedIds = useMemo(() => new Set(savedIdList ?? []), [savedIdList]);
+  const handleToggleSave = useCallback(
+    async (messageId: string) => {
+      const res = await toggleSavedMessageAction(messageId);
+      if (res.status !== "success" || !res.data) {
+        toast.error(res.error?.message || "Gagal menyimpan pesan");
+        return;
+      }
+      const saved = res.data.saved;
+      queryClient.setQueryData<string[]>(["saved-message-ids"], (prev = []) =>
+        saved ? [messageId, ...prev.filter((id) => id !== messageId)] : prev.filter((id) => id !== messageId),
+      );
+      toast(saved ? "Pesan disimpan" : "Dihapus dari tersimpan", {
+        duration: 2000,
+        action: saved ? { label: "Lihat", onClick: () => runAppCommand("saved-messages") } : undefined,
+      });
+    },
+    [queryClient],
+  );
   // DM blocks: the composer is replaced by a notice while either side blocks.
   const [blockStatus, setBlockStatus] = useState<BlockStatus | null>(snapshotBlock ?? null);
   useEffect(() => {
@@ -1132,7 +1161,7 @@ export function ChatRoom({
   }, [userId]);
 
   const handleStartEditLast = useCallback(() => {
-    const userMessages = messages.filter((m) => m.userId === userId && !m.isOptimistic);
+    const userMessages = messages.filter((m) => m.userId === userId && !m.isOptimistic && !m.poll);
     if (userMessages.length > 0) {
       const lastMsg = userMessages[userMessages.length - 1];
       setEditingMessageId(lastMsg.id);
@@ -1241,6 +1270,8 @@ export function ChatRoom({
               pinnedIds={pinnedIds}
               onTogglePin={canPin ? handleTogglePin : undefined}
               onForward={setForwardingMessageId}
+              savedIds={savedIds}
+              onToggleSave={handleToggleSave}
               onLoadMore={loadMoreMessages}
               hasMore={hasMore}
               isLoadingMore={isLoadingMore}

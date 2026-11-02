@@ -11,6 +11,7 @@ export interface MessageRecord {
   pinnedAt?: Date | null;
   editedAt?: Date | null;
   isForwarded?: boolean;
+  poll?: PollDTO | null;
   pinnedBy?: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -53,4 +54,16 @@ export interface PinnedMessageDTO {
   pinnedAt: Date;
   /** File type of the first attachment, for "📷 Foto"-style previews. */
   attachmentType: string | null;
+}
+
+export interface PollDTO {
+  id: string;
+  question: string;
+  allowMultiple: boolean;
+  options: {
+    id: string;
+    text: string;
+    position: number;
+    votes: { userId: string; user: { username: string; name: string | null } | null }[];
+  }[];
 }

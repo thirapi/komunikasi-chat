@@ -1,13 +1,30 @@
 import { db } from "@/lib/db";
-import { messages, attachments as attachmentsTable, roomParticipants } from "@/lib/infrastructure/drizzle/schema";
+import { messages, attachments as attachmentsTable, roomParticipants, polls, pollOptions } from "@/lib/infrastructure/drizzle/schema";
 import { eq, ne, asc, desc, lt, gt, and, ilike, or, like, inArray, isNotNull } from "drizzle-orm";
-import { IMessageRepository } from "@/lib/application/repositories/message.repository.interface";
+import { IMessageRepository, NewPoll } from "@/lib/application/repositories/message.repository.interface";
 import {
   MessageWithUserDTO,
   PinnedMessageDTO,
 } from "@/lib/entities/models/message.model";
 import { AttachmentWithMessageDTO } from "@/lib/entities/models/attachment.model";
 import { createId } from "@paralleldrive/cuid2";
+
+/** Poll with its options and votes, for every query that returns messages. */
+const POLL_WITH = {
+  columns: { id: true, question: true, allowMultiple: true },
+  with: {
+    options: {
+      columns: { id: true, text: true, position: true },
+      orderBy: [asc(pollOptions.position)],
+      with: {
+        votes: {
+          columns: { userId: true },
+          with: { user: { columns: { username: true, name: true } } },
+        },
+      },
+    },
+  },
+} satisfies { columns: Record<string, true>; with: Record<string, unknown> };
 
 export class MessageRepository implements IMessageRepository {
   constructor(private client: typeof db) { }
@@ -18,7 +35,7 @@ export class MessageRepository implements IMessageRepository {
     roomId: string,
     replyTo?: string,
     attachments?: { url: string; key: string; fileType: string; size?: number }[],
-    options?: { isForwarded?: boolean }
+    options?: { isForwarded?: boolean; poll?: NewPoll }
   ): Promise<MessageWithUserDTO> {
     const id = createId();
 
@@ -31,6 +48,21 @@ export class MessageRepository implements IMessageRepository {
         replyTo,
         isForwarded: options?.isForwarded ?? false,
       });
+
+      // Created with its message, so the single new-message broadcast
+      // already carries the poll.
+      if (options?.poll) {
+        const pollId = createId();
+        await tx.insert(polls).values({
+          id: pollId,
+          messageId: id,
+          question: options.poll.question,
+          allowMultiple: options.poll.allowMultiple,
+        });
+        await tx.insert(pollOptions).values(
+          options.poll.options.map((text, position) => ({ id: createId(), pollId, text, position })),
+        );
+      }
 
       if (attachments && attachments.length > 0) {
         await tx.insert(attachmentsTable).values(
@@ -69,6 +101,7 @@ export class MessageRepository implements IMessageRepository {
             },
           },
           attachments: true,
+          poll: POLL_WITH,
           reactions: {
             with: {
               user: {
@@ -104,6 +137,7 @@ export class MessageRepository implements IMessageRepository {
           with: { user: { columns: { username: true, name: true } } },
         },
         attachments: true,
+        poll: POLL_WITH,
         reactions: {
           with: { user: { columns: { username: true, name: true } } },
         },
@@ -199,6 +233,7 @@ export class MessageRepository implements IMessageRepository {
           },
         },
         attachments: true,
+        poll: POLL_WITH,
         reactions: {
           with: {
             user: {
@@ -244,6 +279,7 @@ export class MessageRepository implements IMessageRepository {
           },
         },
         attachments: true,
+        poll: POLL_WITH,
         reactions: {
           with: {
             user: {
@@ -398,6 +434,7 @@ export class MessageRepository implements IMessageRepository {
           },
         },
         attachments: true,
+        poll: POLL_WITH,
         reactions: {
           with: {
             user: {

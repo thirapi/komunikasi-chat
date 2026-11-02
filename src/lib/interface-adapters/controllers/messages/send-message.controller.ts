@@ -14,6 +14,8 @@ import { UpstashIdempotencyStore } from "@/lib/infrastructure/services/upstash-i
 import { UserRepository } from "@/lib/infrastructure/repositories/user.repository";
 import { UserBlockRepository } from "@/lib/infrastructure/repositories/user-block.repository";
 import { ForwardMessageUseCase } from "@/lib/application/use-cases/messages/forward-message.use-case";
+import { VotePollUseCase, preparePoll, pollMessageContent } from "@/lib/application/use-cases/messages/polls.use-case";
+import { PollRepository } from "@/lib/infrastructure/repositories/poll.repository";
 
 const messageRepository = new MessageRepository(db);
 const roomRepository = new RoomRepository(db)
@@ -101,4 +103,22 @@ export const forwardMessageController = async (userId: string, messageId: string
         sent: payload.targetRoomIds.filter((_, i) => results[i].status === "fulfilled"),
         failed: payload.targetRoomIds.filter((_, i) => results[i].status === "rejected"),
     };
+};
+
+const votePollUseCase = new VotePollUseCase(new PollRepository(db), roomRepository, messageRepository, pusherService);
+
+/** Create a poll message: validated, then a normal send carrying the poll. */
+export const createPollController = async (
+    userId: string,
+    roomId: string,
+    input: { question: string; options: string[]; allowMultiple: boolean },
+) => {
+    const poll = preparePoll(input);
+    return sendMessageUseCase.execute(userId, pollMessageContent(poll.question), roomId, undefined, undefined, undefined, { poll });
+};
+
+export const votePollController = async (userId: string, pollId: string, optionIds: string[]) => {
+    const parsed = z.object({ pollId: z.string().min(1), optionIds: z.array(z.string().min(1)).max(10) }).safeParse({ pollId, optionIds });
+    if (!parsed.success) throw new InputParsedError("Invalid input: ", parsed.error.flatten().fieldErrors);
+    return votePollUseCase.execute(userId, parsed.data.pollId, parsed.data.optionIds);
 };

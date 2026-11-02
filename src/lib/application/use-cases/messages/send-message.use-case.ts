@@ -1,5 +1,6 @@
 import { roomChannel } from "@/lib/pusher/channels";
 import type { IUserBlockRepository } from "../../repositories/user-block.repository.interface";
+import type { NewPoll } from "../../repositories/message.repository.interface";
 import { BlockError, BLOCKED_DM_MESSAGE } from "../users/block-user.use-case";
 import { MessageWithUserDTO } from "../../../entities/models/message.model";
 import { IMessageRepository } from "../../repositories/message.repository.interface";
@@ -42,7 +43,7 @@ export class SendMessageUseCase {
     replyTo?: string,
     attachments?: { url: string; key: string; fileType: string; size?: number }[],
     optimisticId?: string,
-    options?: { isForwarded?: boolean }
+    options?: { isForwarded?: boolean; poll?: NewPoll }
   ): Promise<MessageWithUserDTO> {
     await this.assertNotBlocked(userId, roomId);
 
@@ -97,6 +98,17 @@ export class SendMessageUseCase {
     const userName = message.user.username;
 
     const receiverIds = participants.map((p) => p.userId);
+
+    // A new message brings an archived chat back, unless it is muted.
+    const nowMs = Date.now();
+    const toUnarchive = participants
+      .filter((p) => p.archivedAt && !(p.mutedUntil && new Date(p.mutedUntil).getTime() > nowMs))
+      .map((p) => p.userId);
+    if (toUnarchive.length > 0) {
+      await this.roomRepository.setArchived(toUnarchive, roomId, null).catch((err) => {
+        console.error("[send-message] unarchive failed:", err);
+      });
+    }
 
     await this.pusherService.triggerToUsers(
       receiverIds,

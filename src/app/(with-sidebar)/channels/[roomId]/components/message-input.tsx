@@ -15,6 +15,8 @@ import { RoomRecord, RoomWithParticipantsDTO } from "@/lib/entities/models/room.
 import { MessageWithUserDTO } from "@/lib/entities/models/message.model";
 import { ArrowBendUpLeft, X, Paperclip, File, Plus, PaperPlaneRight, ImageSquare, FileText, Microphone, Trash } from "@phosphor-icons/react/dist/ssr";
 import { useVoiceRecorder, formatDuration } from "./hooks/use-voice-recorder";
+import { ChartBarHorizontal } from "@phosphor-icons/react/dist/ssr";
+import { PollComposerDialog } from "./poll-composer-dialog";
 import { cn } from "@/lib/utils";
 import { MentionTextarea } from "@/components/ui/mention-textarea";
 import { registerRetry, clearRetry } from "@/lib/chat/pending-sends";
@@ -344,6 +346,7 @@ export function MessageInput({
   // WhatsApp/Telegram), then send or discard. Sent like any attachment: on
   // screen at once, uploaded and delivered in the background, retryable.
   const voice = useVoiceRecorder();
+  const [pollOpen, setPollOpen] = useState(false);
   const sendVoiceNote = useCallback(
     (file: File) => {
       if (!userId) return;
@@ -610,6 +613,13 @@ export function MessageInput({
                     <span className="text-[11px] text-muted-foreground">PDF, Word, teks</span>
                   </span>
                 </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setPollOpen(true)} className="gap-3 py-2">
+                  <ChartBarHorizontal className="h-[18px] w-[18px] text-muted-foreground" />
+                  <span className="flex flex-col">
+                    <span className="text-sm">Polling</span>
+                    <span className="text-[11px] text-muted-foreground">Tanya pendapat anggota</span>
+                  </span>
+                </DropdownMenuItem>
                 <div className="mt-1 border-t border-border px-2 pt-1.5 pb-1 text-[11px] text-muted-foreground">
                   Bisa juga seret file ke chat atau tempel gambar
                 </div>
@@ -676,6 +686,8 @@ export function MessageInput({
           )}
         </div>
       )}
+
+      <PollComposerDialog open={pollOpen} onOpenChange={setPollOpen} roomId={roomData.id} onCreated={onNewMessage} />
 
       <div className="h-5 flex items-center px-1 text-[11px] text-muted-foreground" aria-live="polite">
         {displayNames.length > 0 ? (

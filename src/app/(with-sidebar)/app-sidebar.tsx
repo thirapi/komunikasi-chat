@@ -12,6 +12,9 @@ import {
   SignOut,
   SealCheck,
   BellSlash,
+  BookmarkSimple,
+  Archive,
+  CaretLeft,
 } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
@@ -44,6 +47,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { Shortcut } from "@/components/ui/kbd";
 import { onAppCommand } from "@/lib/chat/app-commands";
+import { SavedMessagesDialog } from "@/components/saved-messages-dialog";
 import { isPlainLeftClick, navigateToRoom, prefetchRoom, warmRecentRooms } from "@/lib/chat/room-navigation";
 
 // Dialogs loaded on demand
@@ -143,7 +147,8 @@ export function AppSidebar({
   const searchParams = useSearchParams();
   const isMobileFromHook = useIsMobile();
   const { setOpenMobile } = useSidebar();
-  const { unreadRooms, roomActivity, roomTyping, mutedRooms, initializeUnread } = useUnread();
+  const { unreadRooms, roomActivity, roomTyping, mutedRooms, archivedRooms, initializeUnread } = useUnread();
+  const [showArchive, setShowArchive] = React.useState(false);
   const { onlineUserIds } = usePresence();
   const customEmojis = useCustomEmojis();
 
@@ -153,6 +158,7 @@ export function AppSidebar({
   const [openSearchUser, setOpenSearchUser] = React.useState(false);
   const [openDMDialog, setOpenDMDialog] = React.useState(false);
   const [openGlobalSearch, setOpenGlobalSearch] = React.useState(false);
+  const [openSaved, setOpenSaved] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [activeFolderTab, setActiveFolderTab] = React.useState<"all" | "channels" | "dms">("all");
   const [isMounted, setIsMounted] = React.useState(false);
@@ -212,6 +218,7 @@ export function AppSidebar({
         else if (command === "create-channel") setOpenCreateChannel(true);
         else if (command === "explore-channels") setOpenExploreChannels(true);
         else if (command === "refresh-sidebar") refreshSidebar();
+        else if (command === "saved-messages") setOpenSaved(true);
       }),
     [refreshSidebar],
   );
@@ -224,6 +231,7 @@ export function AppSidebar({
         hasMention: (r as any).hasMention,
         unreadCount: r.unreadCount,
         mutedUntil: r.mutedUntil,
+        archivedAt: r.archivedAt,
         lastMessageTime: r.lastMessageTime,
       }))
     );
@@ -278,12 +286,24 @@ export function AppSidebar({
   }, [groups, directMessages]);
 
   // Filtered by tab and inline search
+  // Archived chats live behind an "Arsip" row (search still finds them).
+  const archivedChats = React.useMemo(() => allChats.filter((c) => archivedRooms[c.id]), [allChats, archivedRooms]);
+  const archivedUnread = React.useMemo(
+    () => archivedChats.filter((c) => c.hasUnread).length,
+    [archivedChats],
+  );
+  React.useEffect(() => {
+    if (showArchive && archivedChats.length === 0) setShowArchive(false);
+  }, [showArchive, archivedChats.length]);
+
   const filteredChats = React.useMemo(() => {
-    let list = allChats;
+    let list = searchQuery.trim()
+      ? allChats
+      : allChats.filter((c) => (showArchive ? archivedRooms[c.id] : !archivedRooms[c.id]));
     if (activeFolderTab === "channels") {
-      list = allChats.filter((c) => c.isChannel);
+      list = list.filter((c) => c.isChannel);
     } else if (activeFolderTab === "dms") {
-      list = allChats.filter((c) => !c.isChannel);
+      list = list.filter((c) => !c.isChannel);
     }
 
     if (!searchQuery.trim()) return list;
@@ -294,7 +314,7 @@ export function AppSidebar({
         c.name.toLowerCase().includes(q) ||
         (c.lastMessage && c.lastMessage.toLowerCase().includes(q))
     );
-  }, [allChats, activeFolderTab, searchQuery]);
+  }, [allChats, activeFolderTab, searchQuery, showArchive, archivedRooms]);
 
   async function handleCreateRoom(participantId: string) {
     if (!user) {
@@ -424,6 +444,10 @@ export function AppSidebar({
                     <User />
                     Profil
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setOpenSaved(true)}>
+                    <BookmarkSimple />
+                    Pesan tersimpan
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => router.push("/settings")}>
                     <GearSix />
                     Pengaturan
@@ -519,6 +543,23 @@ export function AppSidebar({
           isMobile ? "pb-[calc(4rem+env(safe-area-inset-bottom))]" : "pb-4"
         )}
       >
+        {!searchQuery.trim() && (showArchive || archivedChats.length > 0) && (
+          <button
+            type="button"
+            onClick={() => setShowArchive((v) => !v)}
+            className="mx-2 mb-1 flex w-[calc(100%-1rem)] items-center gap-3 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-sidebar-accent/60"
+          >
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted">
+              {showArchive ? <CaretLeft className="size-4" /> : <Archive className="size-4 text-muted-foreground" />}
+            </span>
+            <span className="min-w-0 flex-1 font-medium">{showArchive ? "Kembali ke semua chat" : "Arsip"}</span>
+            {!showArchive && (
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {archivedUnread > 0 ? `${archivedUnread} belum dibaca` : archivedChats.length}
+              </span>
+            )}
+          </button>
+        )}
         {filteredChats.length === 0 ? (
           <div className="px-4 py-10 text-sm text-muted-foreground">
             {searchQuery ? (
@@ -696,6 +737,13 @@ export function AppSidebar({
             email: "",
             avatar: "",
           }
+        }
+      />
+      <SavedMessagesDialog
+        open={openSaved}
+        onOpenChange={setOpenSaved}
+        onSelect={(roomId, messageId) =>
+          navigateToRoom(`/channels/${roomId}?messageId=${encodeURIComponent(messageId)}`, router)
         }
       />
       <MessageSearch

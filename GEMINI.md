@@ -2,29 +2,38 @@
 
 ## Primary Mandates
 - **Clean Architecture**: Follow the patterns defined in [clean-architecture.md](./clean-architecture.md).
-- **Post Interactions**: All changes to Like, Repost, Quote, and Bookmark logic MUST follow [docs/post-actions.md](./docs/post-actions.md).
-- **Fediverse & ActivityPub**: Refer to [docs/fediverse-implementation.md](./docs/fediverse-implementation.md) untuk standar protokol. Mendukung standar **FEP-e232 (Object Links)** dan **_misskey_quote**. Implementasi wajib mengikuti arsitektur **Dynamic Whitelist Federation** (Inbox filtering vs Outbound fetch) yang didokumentasikan di [docs/federation-whitelist-strategy.md](./docs/federation-whitelist-strategy.md).
-- **Security Hardening**: Semua request outbound Fediverse wajib melewati proteksi **SSRF** (no private IPs), memiliki limit rekursi thread (max 10), dan menggunakan **Authorized Fetch (Signed GET)**. Concurrent fetches untuk URI yang sama wajib di-lock in-memory.
 - **Mark as Read**: All changes related to message read status must adhere to the throttled and real-time synchronization strategy documented in [docs/mark-as-read.md](./docs/mark-as-read.md).
 - **Lexical Editor**: All chat input components use the Lexical rich text framework. Refer to [docs/lexical-editor.md](./docs/lexical-editor.md) for architecture decisions.
-- **Account Filtering**: Implementasi Mute dan Reduce Intensity WAJIB mengikuti algoritma pembatasan intensitas dan Thread Integrity yang didokumentasikan di [docs/account-filtering.md](./docs/account-filtering.md).
-- **Content Integrity**: All components rendering user content (posts, bios, usernames) MUST use `parseFediverseContent` to support custom emojis and maintain visual parity across the Fediverse.
+- **Content Integrity**: All components rendering user content (messages, bios, usernames) MUST use `parseFediverseContent` (`lib/fediverse-content-parser.ts`, the name is historical) so custom emojis render consistently.
+- **Product Direction**: Chat behaviour takes the middle ground between WhatsApp, Telegram and Teams (pick what most of them converge on). Users expect WhatsApp/Telegram-level smoothness; small UX gaps count.
+- **Server-side Fetching (SSRF)**: Any server fetch of a user-supplied URL MUST go through `lib/net/safe-fetch.ts` (public IPs only on every hop, checked in the socket's DNS lookup; type allow-list; size, time and redirect limits), like the media proxy and link previews.
 - **Custom Emojis & Reactions**: Implementation of exclusive emoji reactions and R2-hosted custom emojis MUST follow [docs/custom-emojis.md](./docs/custom-emojis.md).
-- **Thread Integrity**: Backend logic handling incoming activities MUST implement "Thread Healing" (recursive fetching up to 10 levels) dan melacak URI `context` untuk menjaga keutuhan percakapan.
-- **Surgical Content Cleaning**: Parser ActivityPub WAJIB menggunakan regex multiline-safe untuk menghapus penanda fallback "RE: [URL]" yang redundan jika relasi `replyTo` atau `quoteOf` berhasil dibangun.
 
 ## Architecture Constraints
-1. **Pusher for Microblog (Targeted Only)**: 
-    - NEVER use Pusher for public real-time state updates (e.g., live like counts, live feed refresh). 
-    - Use Pusher ONLY for private, targeted notifications (e.g., "User X liked your post", "User Y replied to you").
-    - Broadcast targeted events to the recipient's private channel (`user-${userId}`).
-    - For public state, continue using optimistic UI updates and local cache management.
-    - Pusher remains the primary real-time engine for the `chat` / `rooms` domain.
+1. **Realtime (Pusher)**:
+    - Chat channels (`private-chat-{roomId}`) and per-user channels (`private-user-{userId}`) are private and authorised by membership/identity in `/api/pusher`. Never add public channels for user data.
+    - Room events: `new-message`, `message-updated`, `message-deleted`, `message-reaction`, `user-typing`, `pins-changed`, `read-receipt` (DMs), `block-changed` (DMs).
+    - User events: `new-message-notification`, `message-deleted-notification`, `room-marked-read`, `room-typing` (DMs and rooms of up to 10), `room-mute-changed`.
+    - Fan out to many users with `triggerToUsers` (one API call per 100 channels).
 
 2. **Interaction Integrity**:
-    - **No-Null User**: All local interactions (Like, Repost, Bookmark) MUST have a valid `userId`. Backend must reject any action where `userId` is null/undefined.
-    - **Single Action (Idempotency)**: Use database transactions and unique constraints to ensure a user can only Like or Repost a specific post once. 
-    - **Visual Debugging**: If the UI shows double counts/icons but the database is clean, the bug is strictly in the Frontend state management (Optimistic UI / Cache logic), not the backend.
+    - **No-Null User**: Every interaction (reaction, pin, vote, save) MUST have a valid `userId` taken from the session (`lib/auth/actor.ts`), never from the client.
+    - **Idempotency**: Use unique constraints (and transactions where needed) so a user cannot react, vote or save twice.
+    - **Visual Debugging**: If the UI shows doubles but the database is clean, the bug is in frontend state (optimistic UI / cache), not the backend.
+
+3. **Message Timestamps**:
+    - `updatedAt` moves on edits, deletions, reactions and pins (delta sync depends on it). "(diedit)" MUST use `editedAt`, never `updatedAt`.
+    - Reaction and other side-table changes MUST call `touchMessage` so delta sync sees them.
+
+4. **Privacy & Blocks**:
+    - Room data returned to a client MUST go through `applyRoomPrivacy` (per viewer: read positions and last seen, reciprocal settings, blocks) or `withoutOthersReadPositions` for list/create endpoints.
+    - DM blocks are enforced in `SendMessageUseCase` and `StartDirectMessageUseCase`; new send paths MUST go through `SendMessageUseCase`.
+
+5. **Storage**:
+    - Deleting a message removes its R2 files only via `DeleteMessageUseCase` (key derived from our URL under `channels/<roomId>/`, kept while another live message references it). Never delete storage keys taken from client input.
+
+6. **Migrations**:
+    - Migrations are not run on deploy. A change that adds columns read by queries MUST ship its migration (`npx drizzle-kit generate`) and the migration must be applied before the code is deployed.
 
 ## Implementation Rules
 1. **Unread Management**:
@@ -38,6 +47,7 @@
     - Please consult [docs/indexeddb-sync.md](./docs/indexeddb-sync.md) for caching architectures.
 4. **Chat Render Architectures**:
     - Avoid Javascript DOM manipulations for anchoring list positions. Leverage column-reverse mechanics.
+    - The one exception is stick-to-bottom (`hooks/use-auto-scroll.ts`): pin `scrollTop = 0` while the reader follows the bottom.
     - Refer to [docs/column-reverse-architecture.md](./docs/column-reverse-architecture.md) for deep-dive.
 5. **Multi-device Sync**:
     - Backend must broadcast `room-marked-read` to the user's private channel after a successful update.

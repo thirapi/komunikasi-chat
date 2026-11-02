@@ -8,7 +8,8 @@ export type AppCommand =
   | "create-channel"
   | "explore-channels"
   /** Re-fetch the chat list (new room, deleted message) without router.refresh. */
-  | "refresh-sidebar";
+  | "refresh-sidebar"
+  | "saved-messages";
 
 const EVENT = "komunikasi:command";
 

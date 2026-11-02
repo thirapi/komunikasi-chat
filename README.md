@@ -63,7 +63,13 @@ Migrations are not run on deploy. After pulling a change that adds one to
   counts, mention badges, live previews and "sedang mengetik…"; DMs show ✓ / ✓✓
   read receipts; an "@" button jumps to unread mentions. The view stays pinned
   to the newest message, and on phones you swipe a message to reply and
-  long-press for its actions.
+  long-press for its actions. Design choices take the middle ground between
+  WhatsApp, Telegram and Teams.
+
+**Chat tools**
+: Mute (mentions still notify), pinned messages, link previews, forward to up
+  to 5 chats, voice messages, saved messages, archive, polls, blocking, and
+  privacy settings for last seen and read receipts (both reciprocal).
 
 **Realtime**
 : Pusher private channels (authorised per room membership) carry messages,

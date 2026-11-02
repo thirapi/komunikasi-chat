@@ -1,4 +1,10 @@
 import { MessageWithUserDTO, PinnedMessageDTO } from "@/lib/entities/models/message.model";
+
+export interface NewPoll {
+  question: string;
+  options: string[];
+  allowMultiple: boolean;
+}
 import { AttachmentWithMessageDTO } from "@/lib/entities/models/attachment.model";
 
 export interface IMessageRepository {
@@ -8,7 +14,7 @@ export interface IMessageRepository {
     roomId: string,
     replyTo?: string,
     attachments?: { url: string; key: string; fileType: string; size?: number }[],
-    options?: { isForwarded?: boolean },
+    options?: { isForwarded?: boolean; poll?: NewPoll },
   ): Promise<MessageWithUserDTO>;
   getMessagesByRoomId(roomId: string, limit?: number, before?: Date, after?: Date): Promise<MessageWithUserDTO[]>;
   getMessageById(messageId: string): Promise<MessageWithUserDTO | null>;

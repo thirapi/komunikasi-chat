@@ -123,7 +123,7 @@ const MARKDOWN_CODE_COMPONENTS = {
     );
   },
 };
-import { ArrowBendUpLeft, File, DownloadSimple, Trash, Copy, PencilSimple, Check, Checks, WarningCircle, PushPin, PushPinSlash, ShareFat } from "@phosphor-icons/react/dist/ssr";
+import { ArrowBendUpLeft, File, DownloadSimple, Trash, Copy, PencilSimple, Check, Checks, WarningCircle, PushPin, PushPinSlash, ShareFat, BookmarkSimple } from "@phosphor-icons/react/dist/ssr";
 import { Button } from "@/components/ui/button";
 import { useState, useMemo, useEffect, useRef, useCallback, memo } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -131,6 +131,7 @@ import { hapticLight, hapticMedium } from "@/lib/native/haptics";
 import { useMessageGestures } from "./hooks/use-message-gestures";
 import { LinkPreviewCard } from "./link-preview-card";
 import { VoiceNotePlayer } from "./voice-note-player";
+import { PollCard } from "./poll-card";
 import {
   Tooltip,
   TooltipContent,
@@ -214,6 +215,8 @@ export function MessageItemComponent({
   isPinned = false,
   onTogglePin,
   onForward,
+  isSaved = false,
+  onToggleSave,
 }: {
   message: MessageWithUserDTO;
   onlineUserIds: string[];
@@ -237,6 +240,8 @@ export function MessageItemComponent({
   /** Present when the viewer may pin in this room. */
   onTogglePin?: (messageId: string) => void;
   onForward?: (messageId: string) => void;
+  isSaved?: boolean;
+  onToggleSave?: (messageId: string) => void;
 }) {
   const router = useRouter();
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -1000,7 +1005,7 @@ const getFileName = (url: string) => {
                     : "text-sm leading-[1.45]"
               )}
             >
-              {renderContent(message.content)}
+              {message.poll ? <PollCard poll={message.poll} currentUserId={currentUserId} /> : renderContent(message.content)}
               {isEdited && (
                 <Tooltip delayDuration={300}>
                   <TooltipTrigger asChild>
@@ -1278,6 +1283,26 @@ const getFileName = (url: string) => {
                 </Tooltip>
               )}
 
+              {onToggleSave && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => onToggleSave(message.id)}
+                      className={cn(
+                        "h-7 w-7 rounded flex items-center justify-center hover:bg-muted transition-colors",
+                        isSaved ? "text-primary" : "text-muted-foreground hover:text-foreground",
+                      )}
+                      aria-label={isSaved ? "Hapus dari tersimpan" : "Simpan pesan"}
+                      aria-pressed={isSaved}
+                    >
+                      <BookmarkSimple weight={isSaved ? "fill" : "regular"} className="w-4 h-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs py-1 px-2">{isSaved ? "Hapus dari tersimpan" : "Simpan pesan"}</TooltipContent>
+                </Tooltip>
+              )}
+
               {onForward && (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1312,6 +1337,7 @@ const getFileName = (url: string) => {
 
               {message.userId === currentUserId && (
                 <>
+                  {!message.poll && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
@@ -1325,6 +1351,7 @@ const getFileName = (url: string) => {
                     </TooltipTrigger>
                     <TooltipContent side="top" className="text-xs py-1 px-2">Edit</TooltipContent>
                   </Tooltip>
+                  )}
 
                   <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
                     <Tooltip>

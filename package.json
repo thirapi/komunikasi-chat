@@ -20,6 +20,7 @@
     "verify:sidebar": "tsx scripts/verify-sidebar-query.ts",
     "measure:markdown": "tsx scripts/measure-markdown-pipeline.ts",
     "measure:password": "tsx scripts/measure-password-hashing.ts",
+    "cleanup:attachments": "tsx scripts/cleanup-deleted-attachments.ts",
     "bench:content": "vitest bench --run",
     "cap:sync": "cap sync",
     "cap:open:ios": "cap open ios",

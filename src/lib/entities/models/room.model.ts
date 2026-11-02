@@ -24,6 +24,7 @@ export interface SidebarRoomDTO {
   unreadCount: number;
   /** Muted until this time, or null. */
   mutedUntil: Date | null;
+  archivedAt: Date | null;
   type: "channel" | "direct";
   userId?: string;
   lastMessage?: string;
@@ -42,6 +43,7 @@ export interface SidebarRoomRow {
   isDirect: boolean;
   lastReadAt: Date | null;
   mutedUntil: Date | null;
+  archivedAt: Date | null;
   lastMessageId: string | null;
   lastMessageContent: string | null;
   lastMessageUserId: string | null;

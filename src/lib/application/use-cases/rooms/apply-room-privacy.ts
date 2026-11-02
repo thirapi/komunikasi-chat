@@ -54,4 +54,18 @@ export function applyRoomPrivacy(
   };
 }
 
+/**
+ * For endpoints that list or create rooms (sidebar-style data, start a DM,
+ * explore channels): nobody needs other members' read positions there, so
+ * they are removed outright instead of applying the full per-viewer rules.
+ */
+export function withoutOthersReadPositions<T extends RoomWithParticipantsDTO>(room: T, viewerId: string | null): T {
+  return {
+    ...room,
+    participants: room.participants.map((p) =>
+      p.user.id === viewerId ? p : { ...p, lastReadAt: null, lastReadMessageId: null },
+    ),
+  };
+}
+
 export type { BlockStatus };

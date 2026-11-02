@@ -99,6 +99,58 @@ export const userBlocks = pgTable("UserBlock", {
     index("UserBlock_blockedId_idx").on(t.blockedId),
 ]);
 
+/** Messages a user saved for later (WhatsApp's starred / Teams' saved messages). */
+export const savedMessages = pgTable("SavedMessage", {
+    id: text("id").primaryKey(),
+    userId: text("userId").notNull().references(() => users.id),
+    messageId: text("messageId").notNull().references(() => messages.id),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => [
+    unique("SavedMessage_user_message_unq").on(t.userId, t.messageId),
+]);
+
+/** A poll attached to a message (one per message). */
+export const polls = pgTable("Poll", {
+    id: text("id").primaryKey(),
+    messageId: text("messageId").notNull().unique().references(() => messages.id),
+    question: text("question").notNull(),
+    allowMultiple: boolean("allowMultiple").default(false).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const pollOptions = pgTable("PollOption", {
+    id: text("id").primaryKey(),
+    pollId: text("pollId").notNull().references(() => polls.id),
+    text: text("text").notNull(),
+    position: integer("position").notNull(),
+}, (t) => [index("PollOption_pollId_idx").on(t.pollId)]);
+
+export const pollVotes = pgTable("PollVote", {
+    id: text("id").primaryKey(),
+    pollId: text("pollId").notNull().references(() => polls.id),
+    optionId: text("optionId").notNull().references(() => pollOptions.id),
+    userId: text("userId").notNull().references(() => users.id),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => [
+    unique("PollVote_option_user_unq").on(t.optionId, t.userId),
+    index("PollVote_poll_user_idx").on(t.pollId, t.userId),
+]);
+
+export const pollsRelations = relations(polls, ({ one, many }) => ({
+    message: one(messages, { fields: [polls.messageId], references: [messages.id] }),
+    options: many(pollOptions),
+}));
+
+export const pollOptionsRelations = relations(pollOptions, ({ one, many }) => ({
+    poll: one(polls, { fields: [pollOptions.pollId], references: [polls.id] }),
+    votes: many(pollVotes),
+}));
+
+export const pollVotesRelations = relations(pollVotes, ({ one }) => ({
+    option: one(pollOptions, { fields: [pollVotes.optionId], references: [pollOptions.id] }),
+    user: one(users, { fields: [pollVotes.userId], references: [users.id] }),
+}));
+
 export const messagesRelations = relations(messages, ({ one, many }) => ({
     user: one(users, { fields: [messages.userId], references: [users.id] }),
     room: one(rooms, { fields: [messages.roomId], references: [rooms.id] }),
@@ -110,6 +162,7 @@ export const messagesRelations = relations(messages, ({ one, many }) => ({
     replies: many(messages, { relationName: "replies" }),
     attachments: many(attachments),
     reactions: many(messageReactions),
+    poll: one(polls, { fields: [messages.id], references: [polls.messageId] }),
 }));
 
 export const rooms = pgTable("Room", {
@@ -138,6 +191,8 @@ export const roomParticipants = pgTable("RoomParticipant", {
     lastReadMessageId: text("lastReadMessageId").references(() => messages.id),
     /** Notifications for this room are muted until then (far future = forever). */
     mutedUntil: timestamp("mutedUntil"),
+    /** Hidden in the chat list's archive since then; null = not archived. */
+    archivedAt: timestamp("archivedAt"),
     joinedAt: timestamp("joinedAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
 }, (t) => ({

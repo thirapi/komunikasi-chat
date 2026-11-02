@@ -18,8 +18,9 @@ export interface IRoomRepository {
   getOtherParticipants(
     roomId: string,
     excludeUserId: string
-  ): Promise<{ userId: string; mutedUntil?: Date | null }[]>;
+  ): Promise<{ userId: string; mutedUntil?: Date | null; archivedAt?: Date | null }[]>;
   setMutedUntil(userId: string, roomId: string, mutedUntil: Date | null): Promise<void>;
+  setArchived(userIds: string[], roomId: string, archivedAt: Date | null): Promise<void>;
   getParticipantIds(roomId: string): Promise<string[]>;
   createRoom(
     name: string,

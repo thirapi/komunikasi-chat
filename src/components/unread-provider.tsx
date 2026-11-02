@@ -22,6 +22,7 @@ type ServerRoomUnread = {
   hasMention: boolean;
   unreadCount?: number;
   mutedUntil?: Date | string | null;
+  archivedAt?: Date | string | null;
   lastMessageTime?: Date | string | null;
 };
 
@@ -50,6 +51,9 @@ interface UnreadContextType {
   mutedRooms: Record<string, number>;
   isMuted: (roomId: string) => boolean;
   setMuted: (roomId: string, mutedUntil: Date | string | null) => void;
+  /** Rooms in the chat list's archive. */
+  archivedRooms: Record<string, true>;
+  setArchived: (roomId: string, archived: boolean) => void;
   markAsRead: (roomId: string) => void;
   markAsUnread: (roomId: string, hasMention?: boolean) => void;
   initializeUnread: (rooms: ServerRoomUnread[]) => void;
@@ -141,6 +145,17 @@ export function UnreadProvider({ children }: { children: React.ReactNode }) {
     }, Math.min(Math.max(0, soonest - now) + 50, 24 * 60 * 60 * 1000));
     return () => clearTimeout(t);
   }, [mutedRooms]);
+  const [archivedRooms, setArchivedRooms] = useState<Record<string, true>>({});
+  const setArchived = useCallback((roomId: string, archived: boolean) => {
+    setArchivedRooms((prev) => {
+      if (archived === !!prev[roomId]) return prev;
+      const next = { ...prev };
+      if (archived) next[roomId] = true;
+      else delete next[roomId];
+      return next;
+    });
+  }, []);
+
   const mutedRoomsRef = useRef(mutedRooms);
   mutedRoomsRef.current = mutedRooms;
   // Stable identity (reads a ref) so listeners bound once can call it.
@@ -166,6 +181,7 @@ export function UnreadProvider({ children }: { children: React.ReactNode }) {
 
   const initializeUnread = useCallback((rooms: ServerRoomUnread[]) => {
     const now = Date.now();
+    setArchivedRooms(Object.fromEntries(rooms.filter((r) => r.archivedAt).map((r) => [r.id, true as const])));
     setMutedRooms(
       Object.fromEntries(
         rooms
@@ -218,8 +234,8 @@ export function UnreadProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ unreadRooms, roomActivity, recordActivity, clearActivity, roomTyping, setRoomTyping, mutedRooms, isMuted, setMuted, markAsRead, markAsUnread, initializeUnread }),
-    [unreadRooms, roomActivity, recordActivity, clearActivity, roomTyping, setRoomTyping, mutedRooms, isMuted, setMuted, markAsRead, markAsUnread, initializeUnread],
+    () => ({ unreadRooms, roomActivity, recordActivity, clearActivity, roomTyping, setRoomTyping, mutedRooms, isMuted, setMuted, archivedRooms, setArchived, markAsRead, markAsUnread, initializeUnread }),
+    [unreadRooms, roomActivity, recordActivity, clearActivity, roomTyping, setRoomTyping, mutedRooms, isMuted, setMuted, archivedRooms, setArchived, markAsRead, markAsUnread, initializeUnread],
   );
 
   return (

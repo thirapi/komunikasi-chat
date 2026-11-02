@@ -17,7 +17,7 @@ import { ServerResponse } from "@/lib/entities/models/response.model";
 import { getMessageController } from "@/lib/interface-adapters/controllers/messages/get-message.controller";
 import { syncRoomMessagesController } from "@/lib/interface-adapters/controllers/messages/sync-room-messages.controller";
 import { togglePinController } from "@/lib/interface-adapters/controllers/messages/toggle-pin.controller";
-import { sendMessageController, forwardMessageController } from "@/lib/interface-adapters/controllers/messages/send-message.controller";
+import { sendMessageController, forwardMessageController, createPollController, votePollController } from "@/lib/interface-adapters/controllers/messages/send-message.controller";
 import {
   startTypingController,
   stopTypingController,
@@ -257,6 +257,32 @@ export const syncRoomMessages = async (roomId: string, since?: Date | string | n
       data: null,
       error: { message: err.message || "Terjadi kesalahan internal", type: err.name },
     };
+  }
+};
+
+/** Post a poll in a room. */
+export const createPollAction = async (
+  roomId: string,
+  input: { question: string; options: string[]; allowMultiple: boolean },
+) => {
+  try {
+    const actorId = await requireWriter();
+    await assertRoomMember(roomId, actorId);
+    return { status: "success" as const, data: await createPollController(actorId, roomId, input), error: null };
+  } catch (err: any) {
+    console.error("Action Error:", err);
+    return { status: "error" as const, data: null, error: { message: err.message || "Gagal membuat polling", type: err.name } };
+  }
+};
+
+/** Vote (or change / withdraw a vote with an empty selection) in a poll. */
+export const votePollAction = async (pollId: string, optionIds: string[]) => {
+  try {
+    const actorId = await requireWriter();
+    return { status: "success" as const, data: await votePollController(actorId, pollId, optionIds), error: null };
+  } catch (err: any) {
+    console.error("Action Error:", err);
+    return { status: "error" as const, data: null, error: { message: err.message || "Gagal memilih", type: err.name } };
   }
 };
 

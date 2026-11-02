@@ -18,7 +18,7 @@ import type { PinnedMessageDTO } from "@/lib/entities/models/message.model";
 import type { BlockStatus } from "@/lib/entities/models/block.model";
 import { getRoomBlockStatusController } from "@/lib/interface-adapters/controllers/users/block-user.controller";
 import { getLastReadAtController } from "@/lib/interface-adapters/controllers/rooms/get-last-read-at.controller";
-import { setRoomMuteController } from "@/lib/interface-adapters/controllers/rooms/set-room-mute.controller";
+import { setRoomMuteController, setRoomArchivedController } from "@/lib/interface-adapters/controllers/rooms/set-room-mute.controller";
 import { getRoomByUserIdController } from "@/lib/interface-adapters/controllers/rooms/get-room-by-user-id.controller";
 import { getSidebarDataController } from "@/lib/interface-adapters/controllers/rooms/get-sidebar-data.controller";
 import { SidebarRoomDTO } from "@/lib/entities/models/room.model";
@@ -140,6 +140,22 @@ export const setRoomMuteAction = async (
     await assertRoomMember(roomId, actorId);
     const mutedUntil = await setRoomMuteController(actorId, roomId, duration);
     return { status: "success", data: { mutedUntil }, error: null };
+  } catch (err: any) {
+    console.error("Action Error:", err);
+    return { status: "error", data: null, error: { message: err.message, type: err.name } };
+  }
+};
+
+/** Archive or unarchive a chat for the signed-in user. */
+export const setRoomArchivedAction = async (
+  roomId: string,
+  archived: boolean
+): Promise<ServerResponse<{ archivedAt: Date | null } | null>> => {
+  try {
+    const actorId = await requireWriter();
+    await assertRoomMember(roomId, actorId);
+    const archivedAt = await setRoomArchivedController(actorId, roomId, archived);
+    return { status: "success", data: { archivedAt }, error: null };
   } catch (err: any) {
     console.error("Action Error:", err);
     return { status: "error", data: null, error: { message: err.message, type: err.name } };

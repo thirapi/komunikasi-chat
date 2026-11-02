@@ -363,4 +363,18 @@ describe("SendMessageUseCase", () => {
       expect(mockPushRepo.getSubscriptionsByUserIds).toHaveBeenCalledWith(["muted", "expired", "normal"])
     })
   })
+
+  describe("archived chats", () => {
+    it("unarchives for receivers who archived the chat, unless they muted it", async () => {
+      ;(mockRoomRepo as any).setArchived = vi.fn().mockResolvedValue(undefined)
+      vi.mocked(mockRepo.createMessage).mockResolvedValue({ ...baseMessage, user: { username: "user1" } } as any)
+      vi.mocked(mockRoomRepo.getOtherParticipants).mockResolvedValue([
+        { userId: "archived", archivedAt: new Date(), mutedUntil: null },
+        { userId: "archivedMuted", archivedAt: new Date(), mutedUntil: new Date(Date.now() + 3600_000) },
+        { userId: "normal", archivedAt: null, mutedUntil: null },
+      ] as any)
+      await createUseCase().execute("user1", "halo", "room1")
+      expect((mockRoomRepo as any).setArchived).toHaveBeenCalledWith(["archived"], "room1", null)
+    })
+  })
 })

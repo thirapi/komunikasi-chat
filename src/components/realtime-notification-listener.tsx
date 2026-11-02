@@ -25,7 +25,7 @@ interface Props {
 export function RealtimeNotificationListener({ user }: Props) {
   const pathname = usePathname();
   const router = useRouter();
-  const { markAsUnread, markAsRead, recordActivity, clearActivity, unreadRooms, setRoomTyping, isMuted, setMuted } = useUnread();
+  const { markAsUnread, markAsRead, recordActivity, clearActivity, unreadRooms, setRoomTyping, isMuted, setMuted, setArchived } = useUnread();
   // Rooms the sidebar already knows about; a message from any other room means
   // someone started a DM / added us to a channel, so the sidebar must reload.
   const knownRoomsRef = useRef(unreadRooms);
@@ -82,6 +82,8 @@ export function RealtimeNotificationListener({ user }: Props) {
 
       // Their message is here, so they are no longer "typing".
       setRoomTyping(message.roomId, message.userId, null);
+      // Same rule as the server: a new message unarchives unless muted.
+      if (!isMuted(message.roomId)) setArchived(message.roomId, false);
 
       // Put the message in the room's cached history right away, so opening
       // the room from the sidebar shows it on the first frame instead of the
@@ -167,6 +169,9 @@ export function RealtimeNotificationListener({ user }: Props) {
     );
 
     // CHAT: mute changed on another tab/device.
+    channel.bind("room-archive-changed", (data: { roomId: string; archivedAt: string | null }) => {
+      if (data?.roomId) setArchived(data.roomId, !!data.archivedAt);
+    });
     channel.bind("room-mute-changed", (data: { roomId: string; mutedUntil: string | null }) => {
       if (data?.roomId) setMuted(data.roomId, data.mutedUntil);
     });
@@ -190,7 +195,7 @@ export function RealtimeNotificationListener({ user }: Props) {
       channel.unbind_all();
       getPusher().unsubscribe(userChannel(user.id));
     };
-  }, [user.id, user.username, markAsUnread, markAsRead, recordActivity, clearActivity, setRoomTyping, isMuted, setMuted, router]);
+  }, [user.id, user.username, markAsUnread, markAsRead, recordActivity, clearActivity, setRoomTyping, isMuted, setMuted, setArchived, router]);
 
   return null;
 }

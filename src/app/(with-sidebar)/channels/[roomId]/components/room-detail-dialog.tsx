@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, forwardRef } from "react";
-import { Prohibit } from "@phosphor-icons/react/dist/ssr";
+import { Prohibit, Archive } from "@phosphor-icons/react/dist/ssr";
+import { useUnread } from "@/components/unread-provider";
 import type { BlockStatus } from "@/lib/entities/models/block.model";
 import {
   Hash, Globe, Lock, CircleNotch, Camera, X, SignOut, UserMinus, Crown,
@@ -34,7 +35,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { RoomWithParticipantsDTO } from "@/lib/entities/models/room.model";
-import { updateChannel, deleteChannel, removeParticipant } from "../room.action";
+import { updateChannel, deleteChannel, removeParticipant, setRoomArchivedAction } from "../room.action";
 import { uploadFileResult } from "@/lib/chat/upload";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -78,6 +79,7 @@ export function RoomDetailDialog({
   blockStatus,
   onToggleBlock,
 }: RoomDetailDialogProps) {
+  const { archivedRooms, setArchived } = useUnread();
   const [name, setName] = useState(roomData.name);
   const [description, setDescription] = useState(roomData.description ?? "");
   const [isPublic, setIsPublic] = useState(roomData.isPublic);
@@ -545,6 +547,25 @@ export function RoomDetailDialog({
                   }}
                 />
               )}
+              <QuickAction
+                icon={Archive}
+                label={archivedRooms[roomData.id] ? "Keluarkan" : "Arsipkan"}
+                title={archivedRooms[roomData.id] ? "Keluarkan dari arsip" : "Arsipkan chat"}
+                onClick={async () => {
+                  const archive = !archivedRooms[roomData.id];
+                  setArchived(roomData.id, archive);
+                  const res = await setRoomArchivedAction(roomData.id, archive);
+                  if (res.status !== "success") {
+                    setArchived(roomData.id, !archive);
+                    toast.error(res.error?.message || "Gagal memperbarui arsip");
+                    return;
+                  }
+                  toast(archive ? "Chat diarsipkan" : "Chat dikeluarkan dari arsip", {
+                    description: archive ? "Pesan baru akan mengeluarkannya dari arsip, kecuali chat dibisukan." : undefined,
+                    duration: 2500,
+                  });
+                }}
+              />
               {!isDirect && isOwner && <QuickAction icon={UserPlus} label="Undang" onClick={() => setShowInvite(true)} />}
               {canShareLink && <QuickAction icon={LinkSimple} label="Salin tautan" onClick={copyJoinLink} />}
               {!isDirect && isOwner && <QuickAction icon={Gear} label="Pengaturan" onClick={() => setTab("settings")} />}
