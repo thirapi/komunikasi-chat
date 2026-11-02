@@ -256,6 +256,8 @@ export class MessageRepository implements IMessageRepository {
       .where(
         and(
           eq(messages.userId, userId),
+          // A deleted message's photo must not live on in the media grid.
+          eq(messages.isDeleted, false),
           or(
             like(attachmentsTable.fileType, "image/%"),
             like(attachmentsTable.fileType, "video/%"),
@@ -282,6 +284,7 @@ export class MessageRepository implements IMessageRepository {
       .where(
         and(
           eq(messages.roomId, roomId),
+          eq(messages.isDeleted, false),
           or(
             like(attachmentsTable.fileType, "image/%"),
             like(attachmentsTable.fileType, "video/%"),
