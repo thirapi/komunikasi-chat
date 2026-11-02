@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { messages, attachments as attachmentsTable, roomParticipants } from "@/lib/infrastructure/drizzle/schema";
-import { eq, asc, desc, lt, gt, and, ilike, or, like, inArray } from "drizzle-orm";
+import { eq, ne, asc, desc, lt, gt, and, ilike, or, like, inArray } from "drizzle-orm";
 import { IMessageRepository } from "@/lib/application/repositories/message.repository.interface";
 import {
   MessageWithUserDTO,
@@ -112,6 +112,22 @@ export class MessageRepository implements IMessageRepository {
     const deletedIds = window.filter((m) => m.isDeleted).map((m) => m.id);
     const changed = window.filter((m) => !m.isDeleted) as unknown as MessageWithUserDTO[];
     return { changed, deletedIds, overflow };
+  }
+
+  async getAttachmentUrlsInUse(urls: string[], excludeMessageId: string): Promise<string[]> {
+    if (urls.length === 0) return [];
+    const rows = await this.client
+      .selectDistinct({ url: attachmentsTable.url })
+      .from(attachmentsTable)
+      .innerJoin(messages, eq(attachmentsTable.messageId, messages.id))
+      .where(
+        and(
+          inArray(attachmentsTable.url, urls),
+          ne(attachmentsTable.messageId, excludeMessageId),
+          eq(messages.isDeleted, false),
+        ),
+      );
+    return rows.map((r) => r.url);
   }
 
   async touchMessage(messageId: string): Promise<void> {

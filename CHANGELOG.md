@@ -98,6 +98,18 @@ simpler unread/mention indicators.
 
 ### Fixed
 
+#### Deleted messages kept their files
+
+Deleting a message only soft-deleted the row: its photos stayed in the shared
+media tab, and the files stayed in R2 with working public links. The media
+tab now skips deleted messages, and deleting a message removes its files from
+R2. Attachment rows come from the client, so the key is derived from the URL
+and must be one of our R2 URLs under that message's room folder, and a file
+still attached to another live message is kept (pasting someone else's file
+URL into your own message and deleting it cannot remove theirs). Storage
+failures are logged and never fail the delete. Files of messages deleted
+before this change stay in R2.
+
 #### No more full-page refresh for chat-list updates
 
 A deleted message and a newly started DM used to call `router.refresh()`,

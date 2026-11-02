@@ -6,6 +6,11 @@ export abstract class FileStorageInterface {
    * never pass through the app server (Vercel caps request bodies ~4.5 MB).
    */
   abstract createUploadUrl(options: CreateUploadUrlOptions): Promise<UploadUrlResult>;
+  /**
+   * The storage key behind one of our own public file URLs, or null when the
+   * URL is not ours (another host, a proxy URL, anything unparseable).
+   */
+  abstract keyFromPublicUrl(url: string): string | null;
 
   protected validateFileSize(size: number, maxSize: number): boolean {
     return size <= maxSize;

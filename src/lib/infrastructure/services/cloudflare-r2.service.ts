@@ -156,6 +156,20 @@ export class CloudflareR2Service extends FileStorageInterface {
     }
   }
 
+  keyFromPublicUrl(url: string): string | null {
+    const base = (this.publicUrlBase || "").replace(/\/+$/, "");
+    if (!base || !url.startsWith(`${base}/`)) return null;
+    const rest = url.slice(base.length + 1).split(/[?#]/)[0];
+    try {
+      const key = decodeURI(rest);
+      // No path tricks: a key is plain segments.
+      if (!key || key.split("/").some((seg) => seg === "" || seg === "." || seg === "..")) return null;
+      return key;
+    } catch {
+      return null;
+    }
+  }
+
   /**
    * Delete a file from Cloudflare R2 storage.
    */

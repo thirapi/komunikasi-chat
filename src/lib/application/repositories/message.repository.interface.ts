@@ -21,6 +21,11 @@ export interface IMessageRepository {
     since: Date,
     limit: number,
   ): Promise<{ changed: MessageWithUserDTO[]; deletedIds: string[]; overflow: boolean }>;
+  /**
+   * Of the given attachment URLs, those still attached to some other message
+   * that is not deleted. Their files must not be removed from storage.
+   */
+  getAttachmentUrlsInUse(urls: string[], excludeMessageId: string): Promise<string[]>;
   /** Bump updatedAt so delta sync picks up a change stored elsewhere (reactions). */
   touchMessage(messageId: string): Promise<void>;
   getRoomIdByMessageId(messageId: string): Promise<string | null>;

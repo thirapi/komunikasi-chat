@@ -4,13 +4,30 @@ import { DeleteMessageUseCase } from "@/lib/application/use-cases/messages/delet
 import { InputParsedError } from "@/lib/entities/errors/common";
 import { z } from "zod";
 import { PusherService } from "@/lib/infrastructure/services/pusher.service";
+import { CloudflareR2Service } from "@/lib/infrastructure/services/cloudflare-r2.service";
 import { db } from "@/lib/db";
 
 const messageRepository = new MessageRepository(db);
 const roomRepository = new RoomRepository(db);
 const pusherService = new PusherService();
 
-const deleteMessageUseCase = new DeleteMessageUseCase(messageRepository, roomRepository, pusherService);
+// The R2 service throws when its env vars are missing; deleting a message
+// must keep working then, only without removing the files from storage.
+function createStorage() {
+    try {
+        return new CloudflareR2Service();
+    } catch (err) {
+        console.warn("[delete-message] storage cleanup disabled:", (err as Error).message);
+        return undefined;
+    }
+}
+
+const deleteMessageUseCase = new DeleteMessageUseCase(
+    messageRepository,
+    roomRepository,
+    pusherService,
+    createStorage(),
+);
 
 const schema = z.object({
     messageId: z.string(),
