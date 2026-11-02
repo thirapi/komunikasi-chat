@@ -1,4 +1,7 @@
 import { neon } from "@neondatabase/serverless";
+import { assertLocalDatabase } from "./local-only";
+
+assertLocalDatabase("db:reset");
 
 const sql = neon(process.env.DATABASE_URL!);
 

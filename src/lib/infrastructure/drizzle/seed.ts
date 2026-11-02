@@ -1,4 +1,5 @@
 import { db } from "../../db";
+import { assertLocalDatabase } from "./local-only";
 import {
     permissions as permissionsTable,
     roles as rolesTable,
@@ -13,6 +14,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { hashSync } from "@node-rs/bcrypt";
 
 async function main() {
+    assertLocalDatabase("db:seed");
     console.log("🌱 Starting seed...");
 
     // 1. Permissions
