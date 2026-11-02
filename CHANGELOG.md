@@ -13,7 +13,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 #### Chat list menu, roles and moderation, better forwards
 
-- **Chat list menu** ("⋯" on hover, right-click or long-press): pin a chat to
+- **Right-click menus** (Telegram Web style; long-press on touch) on chats,
+  messages and members. Messages get a reaction row plus reply, copy (or copy
+  the selected text), copy link, copy message link, forward, save, pin, edit
+  and delete; members get message, profile, copy username and remove. Menus
+  and dropdowns share a translucent, blurred surface.
+- **Chat list menu** (right-click or long-press a chat): pin a chat to
   the top (at most 5, most recently pinned first), mark as unread (a dot until
   the chat is opened) or read without opening, mute, archive.
 - **Delete for me** on any message (WhatsApp, Telegram), synced to the user's

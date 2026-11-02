@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
-import { ShieldCheck } from "@phosphor-icons/react/dist/ssr";
+import { ShieldCheck, ChatCircle, User as UserIcon, Copy } from "@phosphor-icons/react/dist/ssr";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import {
   HoverCard,
@@ -99,10 +100,23 @@ export function MemberList({
     return roomData.participants.filter((p) => !onlineUserIds.includes(p.user.id));
   }, [roomData.participants, onlineUserIds]);
 
+  const myRole =
+    currentUserId === roomData.ownerId
+      ? "owner"
+      : roomData.participants.find((p) => p.user.id === currentUserId)?.role ?? "member";
+
   const renderParticipant = (participant: any, isParticipantOnline: boolean) => {
     const isParticipantOwner = participant.user.id === roomData.ownerId;
+    const isSelf = participant.user.id === currentUserId;
+    // Same rules as RemoveParticipantUseCase.
+    const canRemove =
+      !isSelf &&
+      !isParticipantOwner &&
+      (myRole === "owner" || (myRole === "admin" && participant.role !== "admin"));
     return (
-      <li key={participant.user.id} className="group flex items-center gap-2.5 w-full px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors">
+      <ContextMenu key={participant.user.id}>
+      <ContextMenuTrigger asChild>
+      <li className="group flex items-center gap-2.5 w-full px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors">
         <ProfileHoverCard
           user={{
             id: participant.user.id,
@@ -168,6 +182,33 @@ export function MemberList({
           </div>
         </ProfileHoverCard>
       </li>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-52">
+        {!isSelf && (
+          <ContextMenuItem onSelect={() => handleStartDM(participant.user.id)}>
+            <ChatCircle /> Kirim pesan
+          </ContextMenuItem>
+        )}
+        <ContextMenuItem onSelect={() => router.push(`/profile/${participant.user.username}`)}>
+          <UserIcon /> Lihat profil
+        </ContextMenuItem>
+        <ContextMenuItem
+          onSelect={() =>
+            void navigator.clipboard.writeText(`@${participant.user.username}`).then(() => toast.success("Username disalin"))
+          }
+        >
+          <Copy /> Salin username
+        </ContextMenuItem>
+        {(canRemove || (isSelf && !isParticipantOwner && !roomData.isDirect)) && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem variant="destructive" onSelect={() => handleKick(participant.user.id)}>
+              <UserMinus /> {isSelf ? "Keluar dari channel" : "Keluarkan dari channel"}
+            </ContextMenuItem>
+          </>
+        )}
+      </ContextMenuContent>
+      </ContextMenu>
     );
   };
 

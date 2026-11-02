@@ -123,7 +123,8 @@ const MARKDOWN_CODE_COMPONENTS = {
     );
   },
 };
-import { ArrowBendUpLeft, File, DownloadSimple, Trash, Copy, PencilSimple, Check, Checks, WarningCircle, PushPin, PushPinSlash, ShareFat, BookmarkSimple } from "@phosphor-icons/react/dist/ssr";
+import { ArrowBendUpLeft, File, DownloadSimple, Trash, Copy, PencilSimple, Check, Checks, WarningCircle, PushPin, PushPinSlash, ShareFat, BookmarkSimple, LinkSimple } from "@phosphor-icons/react/dist/ssr";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { Button } from "@/components/ui/button";
 import { useState, useMemo, useEffect, useRef, useCallback, memo } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -383,10 +384,35 @@ export function MessageItemComponent({
     return Object.values(groups);
   }, [message.reactions, currentUserId]);
 
+  // Copy what the reader sees: mention tokens become @username.
+  const plainText = () =>
+    (message.content || "").replace(/<@([a-zA-Z0-9_-]+)>/g, (match, uid: string) => {
+      if (uid === "everyone") return "@everyone";
+      const p = roomData?.participants?.find((x) => x.user.id === uid);
+      return p ? `@${p.user.username}` : match;
+    });
+  const copy = (text: string, done: string) => {
+    void navigator.clipboard.writeText(text).then(
+      () => toast.success(done),
+      () => toast.error("Gagal menyalin"),
+    );
+  };
   const handleCopy = () => {
-    navigator.clipboard.writeText(message.content || "");
-    toast.success("Teks disalin");
+    copy(plainText(), "Teks disalin");
     setShowMobileActions(false);
+  };
+
+  // Context menu (right-click), Telegram Web style. What was right-clicked
+  // decides a few items: a link adds "Salin tautan", selected text is what
+  // "Salin" copies.
+  const [contextLink, setContextLink] = useState<string | null>(null);
+  const [contextSelection, setContextSelection] = useState("");
+  const onContextMenuCapture = (e: React.MouseEvent) => {
+    const anchor = (e.target as HTMLElement).closest("a[href]") as HTMLAnchorElement | null;
+    setContextLink(anchor && /^https?:/i.test(anchor.href) ? anchor.href : null);
+    const sel = window.getSelection();
+    const inside = sel && sel.rangeCount > 0 && e.currentTarget.contains(sel.anchorNode);
+    setContextSelection(inside ? sel!.toString().trim() : "");
   };
 
   const formatTime = (date: Date) => {
@@ -811,8 +837,12 @@ const getFileName = (url: string) => {
 
   const createdAt = new Date(message.createdAt);
 
+  const canContext = !message.isOptimistic && !isEditing && !isMobile;
   return (
+    <ContextMenu>
+    <ContextMenuTrigger asChild disabled={!canContext}>
     <div
+      onContextMenuCapture={canContext ? onContextMenuCapture : undefined}
       className={cn(
         "relative group px-3 sm:px-4 cursor-default",
         showHeader
@@ -1441,6 +1471,77 @@ const getFileName = (url: string) => {
         />
       )}
     </div>
+    </ContextMenuTrigger>
+    {canContext && (
+      <ContextMenuContent className="w-56">
+        <div className="flex items-center justify-between gap-0.5 px-0.5 pb-1">
+          {[...QUICK_REACTIONS, "😮", "😢", "🙏"].map((emoji) => (
+            <ContextMenuItem
+              key={emoji}
+              onSelect={() => handleToggleReaction(emoji)}
+              className="h-9 w-9 justify-center rounded-full p-0 text-xl transition-transform hover:scale-110 focus:scale-110"
+              aria-label={`Reaksi ${emoji}`}
+            >
+              {emoji}
+            </ContextMenuItem>
+          ))}
+        </div>
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={() => onReply(message)}>
+          <ArrowBendUpLeft /> Balas
+        </ContextMenuItem>
+        {contextSelection ? (
+          <ContextMenuItem onSelect={() => copy(contextSelection, "Teks terpilih disalin")}>
+            <Copy /> Salin teks terpilih
+          </ContextMenuItem>
+        ) : message.content ? (
+          <ContextMenuItem onSelect={handleCopy}>
+            <Copy /> Salin teks
+          </ContextMenuItem>
+        ) : null}
+        {contextLink && (
+          <ContextMenuItem onSelect={() => copy(contextLink, "Tautan disalin")}>
+            <LinkSimple /> Salin tautan
+          </ContextMenuItem>
+        )}
+        <ContextMenuItem
+          onSelect={() =>
+            copy(`${window.location.origin}/channels/${message.roomId}?messageId=${encodeURIComponent(message.id)}`, "Tautan pesan disalin")
+          }
+        >
+          <LinkSimple /> Salin tautan pesan
+        </ContextMenuItem>
+        {onForward && (
+          <ContextMenuItem onSelect={() => onForward(message.id)}>
+            <ShareFat /> Teruskan
+          </ContextMenuItem>
+        )}
+        {onToggleSave && (
+          <ContextMenuItem onSelect={() => onToggleSave(message.id)}>
+            <BookmarkSimple weight={isSaved ? "fill" : "regular"} /> {isSaved ? "Hapus dari tersimpan" : "Simpan pesan"}
+          </ContextMenuItem>
+        )}
+        {onTogglePin && (
+          <ContextMenuItem onSelect={() => onTogglePin(message.id)}>
+            {isPinned ? <PushPinSlash /> : <PushPin />} {isPinned ? "Lepas sematan" : "Sematkan"}
+          </ContextMenuItem>
+        )}
+        {message.userId === currentUserId && !message.poll && (
+          <ContextMenuItem onSelect={() => onStartEdit(message)}>
+            <PencilSimple /> Edit
+          </ContextMenuItem>
+        )}
+        {(onHide || canDeleteForEveryone) && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem variant="destructive" onSelect={() => setDeleteConfirmOpen(true)}>
+              <Trash /> Hapus
+            </ContextMenuItem>
+          </>
+        )}
+      </ContextMenuContent>
+    )}
+    </ContextMenu>
   );
 }
 

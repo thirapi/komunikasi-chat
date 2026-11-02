@@ -1,18 +1,17 @@
 "use client";
 
-import { Archive, Bell, BellSlash, CheckCircle, DotsThree, EnvelopeSimple, PushPin, PushPinSlash } from "@phosphor-icons/react/dist/ssr";
+import { Archive, Bell, BellSlash, CheckCircle, EnvelopeSimple, PushPin, PushPinSlash } from "@phosphor-icons/react/dist/ssr";
 import { toast } from "sonner";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { useUnread } from "@/components/unread-provider";
 import {
   markRoomReadAction,
@@ -31,20 +30,11 @@ const MUTES = [
 ];
 
 /**
- * Per-chat actions in the chat list (WhatsApp/Telegram): pin, mark as
- * read/unread, mute, archive. Opened from the "⋯" button on hover or by
- * right-click / long-press on the row. Everything applies locally first and
- * rolls back if the server refuses.
+ * Per-chat actions in the chat list, Telegram Web style: right-click a chat
+ * (long-press on touch) to pin it, mark it read/unread, mute or archive it.
+ * Everything applies locally first and rolls back if the server refuses.
  */
-export function ChatListItemMenu({
-  roomId,
-  open,
-  onOpenChange,
-}: {
-  roomId: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
+export function ChatListItemMenu({ roomId, children }: { roomId: string; children: React.ReactNode }) {
   const {
     unreadRooms, pinnedChats, setChatPinned, markAsRead, markAsUnreadManually,
     mutedRooms, setMuted, archivedRooms, setArchived,
@@ -64,22 +54,10 @@ export function ChatListItemMenu({
   };
 
   return (
-    <DropdownMenu open={open} onOpenChange={onOpenChange}>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          aria-label="Opsi chat"
-          onClick={(e) => e.stopPropagation()}
-          className={cn(
-            "absolute right-2 top-1/2 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md bg-sidebar text-muted-foreground shadow-sm ring-1 ring-border transition-opacity hover:text-foreground",
-            open ? "opacity-100" : "opacity-0 group-hover/chat:opacity-100 focus-visible:opacity-100",
-          )}
-        >
-          <DotsThree weight="bold" className="h-4 w-4" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52" onClick={(e) => e.stopPropagation()}>
-        <DropdownMenuItem
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent className="w-56">
+        <ContextMenuItem
           onSelect={() => {
             const previous = pinnedChats[roomId] ?? null;
             void run(
@@ -89,38 +67,38 @@ export function ChatListItemMenu({
             );
           }}
         >
-          {pinned ? <PushPinSlash className="mr-2 h-4 w-4" /> : <PushPin className="mr-2 h-4 w-4" />}
+          {pinned ? <PushPinSlash className="h-4 w-4" /> : <PushPin className="h-4 w-4" />}
           {pinned ? "Lepas sematan chat" : "Sematkan chat"}
-        </DropdownMenuItem>
-        <DropdownMenuItem
+        </ContextMenuItem>
+        <ContextMenuItem
           onSelect={() =>
             unread
               ? void run(() => markAsRead(roomId), () => markAsUnreadManually(roomId), () => markRoomReadAction(roomId))
               : void run(() => markAsUnreadManually(roomId), () => markAsRead(roomId), () => setMarkedUnreadAction(roomId, true))
           }
         >
-          {unread ? <CheckCircle className="mr-2 h-4 w-4" /> : <EnvelopeSimple className="mr-2 h-4 w-4" />}
+          {unread ? <CheckCircle className="h-4 w-4" /> : <EnvelopeSimple className="h-4 w-4" />}
           {unread ? "Tandai sudah dibaca" : "Tandai belum dibaca"}
-        </DropdownMenuItem>
+        </ContextMenuItem>
         {muted ? (
-          <DropdownMenuItem
+          <ContextMenuItem
             onSelect={() => {
               const previous = mutedRooms[roomId];
               void run(() => setMuted(roomId, null), () => setMuted(roomId, new Date(previous)), () => setRoomMuteAction(roomId, "off"));
             }}
           >
-            <Bell className="mr-2 h-4 w-4" />
+            <Bell className="h-4 w-4" />
             Bunyikan lagi
-          </DropdownMenuItem>
+          </ContextMenuItem>
         ) : (
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <BellSlash className="mr-2 h-4 w-4" />
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>
+              <BellSlash className="h-4 w-4" />
               Bisukan
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent>
               {MUTES.map((m) => (
-                <DropdownMenuItem
+                <ContextMenuItem
                   key={m.value}
                   onSelect={() =>
                     void run(
@@ -131,21 +109,21 @@ export function ChatListItemMenu({
                   }
                 >
                   {m.label}
-                </DropdownMenuItem>
+                </ContextMenuItem>
               ))}
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
         )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
+        <ContextMenuSeparator />
+        <ContextMenuItem
           onSelect={() =>
             void run(() => setArchived(roomId, !archived), () => setArchived(roomId, archived), () => setRoomArchivedAction(roomId, !archived))
           }
         >
-          <Archive className="mr-2 h-4 w-4" />
+          <Archive className="h-4 w-4" />
           {archived ? "Keluarkan dari arsip" : "Arsipkan chat"}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }

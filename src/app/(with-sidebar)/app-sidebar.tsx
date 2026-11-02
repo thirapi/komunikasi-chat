@@ -150,7 +150,6 @@ export function AppSidebar({
   const isMobileFromHook = useIsMobile();
   const { setOpenMobile } = useSidebar();
   const { unreadRooms, roomActivity, roomTyping, mutedRooms, archivedRooms, pinnedChats, initializeUnread } = useUnread();
-  const [menuFor, setMenuFor] = React.useState<string | null>(null);
   const [showArchive, setShowArchive] = React.useState(false);
   const { onlineUserIds } = usePresence();
   const customEmojis = useCustomEmojis();
@@ -601,15 +600,8 @@ export function AppSidebar({
               const isActive = pathname.startsWith(chat.url);
               const isOnline = !chat.isChannel && onlineUserIds.includes(chat.userId ?? "");
               return (
-                <li
-                  key={chat.id}
-                  className="group/chat relative"
-                  onContextMenu={(e) => {
-                    // Right-click / long-press opens the chat's menu.
-                    e.preventDefault();
-                    setMenuFor(chat.id);
-                  }}
-                >
+                <li key={chat.id}>
+                  <ChatListItemMenu roomId={chat.id}>
                   <Link
                     href={chat.url}
                     prefetch={false}
@@ -719,11 +711,7 @@ export function AppSidebar({
                       </div>
                     </div>
                   </Link>
-                  <ChatListItemMenu
-                    roomId={chat.id}
-                    open={menuFor === chat.id}
-                    onOpenChange={(o) => setMenuFor(o ? chat.id : null)}
-                  />
+                  </ChatListItemMenu>
                 </li>
               );
             })}
