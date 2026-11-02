@@ -113,7 +113,7 @@ export function ChatHeader({
   }, [roomData.participants, onlineUserIds]);
 
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-border bg-background sticky top-0 z-10 px-3 md:px-4 h-14 shrink-0">
+    <div className="flex items-center justify-between gap-1 md:gap-3 border-b border-border bg-background sticky top-0 z-10 px-2 md:px-4 h-14 shrink-0">
       <div className="flex items-center gap-1 min-w-0 flex-1">
         {/* Sidebar Trigger - Mobile only */}
         {isMounted && (
@@ -209,7 +209,7 @@ export function ChatHeader({
           </div>
         </button>
       </div>
-      <div className="flex items-center gap-1">
+      <div className="flex shrink-0 items-center gap-0 md:gap-1">
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -228,12 +228,13 @@ export function ChatHeader({
 <Shortcut keys={["mod", "f"]} className="pointer-events-none" keyClassName="h-[18px] min-w-[18px] text-[10px] bg-background" />
                 </Button>
 
-                {/* Mobile: Simple Icon Button */}
+                {/* Phones: no search button here; the title needs the room
+                    (search stays one tap away in the details). */}
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={onToggleSearch}
-                  className="md:hidden h-10 w-10 md:h-8 md:w-8 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors flex-shrink-0"
+                  className="hidden h-10 w-10 md:h-8 md:w-8 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors flex-shrink-0"
                 >
                   <MagnifyingGlass className="h-[18px] w-[18px]" />
                 </Button>
